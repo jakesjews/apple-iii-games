@@ -98,7 +98,7 @@ t.run(function()
     t.check(signed('player')<-15,'held Open Apple steers left')
     right:set_value(1); t.wait(60); t.settle(); right:set_value(0)
     t.check(signed('player')>15,'held Solid Apple steers right')
-    fixture(); t.writeword('player',75); t.write('speed',180); t.ticks(6)
+    fixture(); t.writeword('player',75); t.write('speed',180); t.wait(60); t.settle()
     t.check(t.read('speed')<100,'off-road grass slows the car')
 
     fixture()

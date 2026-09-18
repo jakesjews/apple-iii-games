@@ -56,6 +56,7 @@ clean:
 .SECONDARY:
 
 # Highway keeps code in the system bank and banks its much larger asset set.
+# Its nonrecursive C never runs in IRQs, allowing faster static local variables.
 build/highway/tables.s: tools/highway_assets.py games/highway/ready.pcm platform/apple3/font.json
 	$(PYTHON) tools/highway_assets.py
 build/highway/tables.o: build/highway/tables.s
@@ -65,7 +66,7 @@ build/highway/engine.o: games/highway/engine.s
 	$(CA65) -g -o $@ $<
 build/highway/main.o: games/highway/main.c games/highway/engine.h platform/apple3/apple3.h build/highway/tables.s
 	@mkdir -p $(@D)
-	$(CL65) -t none --cpu 6502 -Oirs -g -I platform/apple3 -I games/highway -I build/highway -c -o $@ $<
+	$(CL65) -t none --cpu 6502 -Oirs -Cl --codesize 500 -g -I platform/apple3 -I games/highway -I build/highway -c -o $@ $<
 build/highway/code.bin: build/highway/main.o build/highway/engine.o build/highway/tables.o build/platform/joystick.o games/highway/game.cfg
 	$(CL65) -t none -C games/highway/game.cfg -m build/highway/highway.map -Ln build/highway/highway.lbl -Wl --dbgfile,build/highway/highway.dbg -o $@ $(filter %.o,$^)
 build/highway/highway.po: build/highway/code.bin build/highway/tables.s games/highway/boot.s tools/highway_disk.py tools/disk.py

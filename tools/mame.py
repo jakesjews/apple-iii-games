@@ -64,6 +64,7 @@ def main() -> None:
         suites.append((ROOT / "tests/joystick.lua", "joystick-"))
     if args.game == "highway":
         suites.append((ROOT / "tests/highway_race.lua", "race-"))
+        suites.append((ROOT / "tests/highway_render.lua", "render-"))
     env["A3_TEST_GAME"] = args.game
     for suite, prefix in suites:
         for extension, ram, smoke in (("po", "256K", False), ("dsk", "256K" if args.game == "highway" else "128K", True)):

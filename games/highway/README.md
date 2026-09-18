@@ -52,7 +52,9 @@ python3 tools/test_highway_core.py ../Apple-III-MiSTer
 The MAME suite cold-boots both disk formats with the original ROM, checks the
 128 KB error screen, exercises keyboard and joystick controls, collisions,
 pause, mute, checkpoints, timeout and retry, and verifies the loaded program
-and all asset banks. A separate driver completes a tour using only emulated
+and all asset banks. Rendering tests compare incremental updates on both pages
+against full redraws, including overlaps, edge clipping and digit-only HUD writes.
+A separate driver completes a tour using only emulated
 joystick inputs, without changing game state.
 
 The core test snapshots the supplied checkout, including uncommitted files,
@@ -67,18 +69,22 @@ No physical MiSTer play test has been claimed.
 - Native **280×192 RGB** graphics, respecting two colors in each seven-pixel
   group, with two complete graphics pages in bank zero.
 - **81 road poses** with nine hill profiles. The renderer updates changed road
-  boundaries and markings, and retains unchanged object positions between pages.
+  boundaries and markings using damage tracked separately for each graphics page.
+  Unchanged sprites are retained unless road or object updates affect their rows.
 - **128 car/scenery variants** plus four checkpoint banners, compiled into 6502
   drawing routines. Four car colors share code through indexed palettes.
 - Native **extended addressing** lets those routines execute in an asset bank
   while their stores reach the hidden graphics page. Scaling happens at build
-  time, rather than during play.
+  time, rather than during play. Sprite row addresses are cached per object and
+  graphics page; flat erasure spans and HUD digits use unrolled assembly stores.
 - The **6-bit DAC** plays a short “Get ready” sample and a continuous engine
   tone. A 2 kHz VIA interrupt also supplies the clock for 50 Hz driving physics.
   The joystick keeps the other VIA's timer 2 for ADC measurements.
 
-Rendering varies with scene complexity and steering; the initial 30 fps target
-was not reached. See the [validation notes](../../docs/highway-validation.md) for measured frame rates.
+The C build uses `-Oirs -Cl --codesize 500`; interrupts stay in assembly, and C
+functions are nonrecursive. Rendering varies with scene complexity and steering;
+the initial 30 fps target was not reached. See the
+[validation notes](../../docs/highway-validation.md) for measured frame rates.
 Physics uses the timer, so car speed and the race clock do not depend on the
 number of rendered frames. This is a constrained 6502 racer, without hardware
 sprites or scaling.
@@ -87,8 +93,9 @@ sprites or scaling.
 
 | Region | Purpose |
 | --- | --- |
+| System `$0200–$06EF` | First-page sprite address cache |
 | System `$A200–$BFFF`, `$D000–$EFFF` | Program, renderer, font, tables |
-| System `$0800–$17FF` | Variables, geometry history, PCM/skyline scratch |
+| System `$0800–$17FF` | Variables, geometry history, PCM/skyline scratch and second-page sprite cache |
 | System `$1800–$18FF` | Private relocated zero page during compiled drawing |
 | System `$1400–$14FF` | Extended-address sister bytes; shares scratch after PCM |
 | System `$1C00–$1FFF` | C stack reserve |

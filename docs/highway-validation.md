@@ -6,16 +6,17 @@ The released disk and ZIP are under `releases/`. No Apple ROM is distributed.
 ## Results
 
 - **6 Python checks** pass for disk geometry, payload placement and word data.
-- **419 MAME checks** pass across all six games. Highway contributes 65: 43
+- **459 MAME checks** pass across all six games. Highway contributes 105: 43
   gameplay/rendering checks on the ProDOS-order disk, 11 on the DOS-order disk,
-  five for each complete controller-driven tour, and the 128 KB rejection check.
+  five for each complete controller-driven tour, 20 rendering checks per disk
+  format, and the 128 KB rejection check.
 - Highway's suite verifies the timer, DAC output and mute, keyboard and joystick
   inputs, pause, off-road slowdown, collisions, overtaking, tunnel transitions,
   both checkpoints, the finish, timeout, retry, best-score retention, sharp-turn
   background restoration, and every byte of the loaded asset banks and program.
 - The complete tour driver only changes joystick input ports. Both disk formats
-  finish all three stages. The recorded run takes approximately **91 seconds**,
-  survives nine collisions and finishes with time remaining.
+  finish all three stages. The recorded run takes approximately **85 seconds**,
+  survives seven collisions and finishes with time remaining.
 - **10 RTL checks** pass using the local Apple-III-MiSTer CPU, video, RAM, VIAs,
   DAC and ADC. They cover startup, timer activity, acceleration, pause/resume,
   audio, both display pages, banked sprite execution, and **zero writes to the
@@ -25,34 +26,57 @@ The released disk and ZIP are under `releases/`. No Apple ROM is distributed.
 
 The other five game disks remain byte-for-byte unchanged.
 
-After removing the checkpoint HUD, Highway's 65 MAME checks and the ZIP smoke
-suite were rerun. The core results are from the initial release.
+The rendering suite compares both graphics pages against a full reconstruction
+across twelve camera/hill/stripe combinations, overlapping traffic, and finish
+banner appearance/removal. It also verifies zero framebuffer writes on unchanged
+paused frames, one-digit speed updates, timer warning colors, and digit carries.
 
 ## Timing
 
 These are measured rendered frame rates, rather than a claim based on the
 nominal CPU frequency:
 
-| Workload | MAME 0.289 | Core RTL (initial release) |
+| Workload | MAME 0.289 | Current core RTL |
 | --- | --- | --- |
-| Attract scene | About 14.2 fps, 5-second sample | About 14.7 fps, 3-second sample |
-| Complete controller-driven race | About 9.0 fps, 91-second run | Not measured over a complete tour |
-| Steering and traffic sample | Included in the complete run above | About 10.5 fps, 4-second sample |
+| Attract scene | About 18.2 fps, 5-second sample | About 19.0 fps, 3-second sample |
+| Complete controller-driven race | About 10.6 fps, 85-second run | Not measured over a complete tour |
+| Steering and traffic sample | Included in the complete run above | About 13.8 fps, 4-second sample |
 
-The original **30 fps target was not achieved**. Drawing cost varies with
-steering, traffic sizes, hills and the checkpoint banner. Driving physics uses
+With the same controller-driver policy, the previous build (`65ba105`) averaged
+**9.04 fps** over a complete MAME tour; this build averages **10.64 fps**, about
+**18% faster**. The attract scene improved from 14.2 to 18.2 fps. The driver is
+closed-loop, so traffic, collisions and tour duration differ as frame pacing
+changes; these are complete-play benchmarks, not identical instruction traces.
+The core sample is shorter and should not be presented as a full-race average.
+
+All four optimization areas are implemented:
+
+- Per-page geometry/stripe history skips unchanged two-scanline road bands.
+  Erased sprites invalidate affected bands, and clipped lane/edge aliases remain
+  correct when only stripe colors change.
+- Sprites retain per-page address tables and skip unchanged, undamaged objects.
+  Damage propagates in painter order; erasure uses straight-line span stores.
+  Address caches are invalidated after scene preparation and spoken audio.
+- Highway uses `-Oirs -Cl --codesize 500`. Its C routines are nonrecursive and
+  never run from interrupts, so static locals are safe. Projection uses bounded
+  8-bit coordinates and generated dimensions; tables replace repeated arithmetic.
+- Each HUD digit is cached per page and drawn through a specialized assembly
+  routine. Color changes invalidate the time digits even if their value is equal.
+
+The original **30 fps target was not achieved**, nor a sustained 15 fps race.
+Drawing cost varies with steering, traffic sizes, hills and the checkpoint banner. Driving physics uses
 a 50 Hz fixed step derived from the VIA clock, with bounded catch-up. Scene
 preparation and the spoken countdown do not consume race time.
 
 ## Core provenance and scope
 
-The test uses a snapshot of the user's sibling checkout, including then-current
-uncommitted changes, based on:
+The test uses a fresh snapshot of the user's sibling checkout (clean at the
+time of this run), based on:
 
-- Commit: `7a54cba792cc545a009ae1833ad05df2e9f11620`
-  (`Implement peripheral wait states and boundary timing`).
+- Commit: `f723fda16431cdbb1e5b47b29c11b3fdbf412288`
+  (`Implement the virtual block-storage card`).
 - Working-tree snapshot SHA-256:
-  `38b68c2a78def35df0dfdf24b8bba6a810473f95cc8422f790aa22f46e3330d7`.
+  `43713b24bd3a1bedfb43b74460879ace549c4881746eae42bcb04a1d592e0616`.
 
 The harness preloads the actual linked program and asset banks and starts them
 with an original diagnostic reset stub. It does not replace the CPU, memory

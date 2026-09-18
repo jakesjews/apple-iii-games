@@ -187,6 +187,7 @@ for name,col in [('asset_bank',0),('asset_lo',1),('asset_hi',1),('asset_w',2),('
     if name.endswith('_lo'): vals=[v&255 for v in vals]
     if name.endswith('_hi'): vals=[v>>8 for v in vals]
     s+=emit(name,vals)
+    if name in ('asset_w','asset_h'): s+=f'.export _{name}\n_{name} = {name}\n'
 s+=emit('row_lo',[offset(y)&255 for y in range(192)])
 s+=emit('row_hi',[(offset(y)>>8)+0x20 for y in range(192)])
 s+=emit('stripe_depth',[int(600/(r+5))&255 for r in range(56)])

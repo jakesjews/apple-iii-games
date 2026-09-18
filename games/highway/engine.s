@@ -1,6 +1,8 @@
 .setcpu "6502"
 .export __STARTUP__ : absolute = 1
 .export _engine_init,_scene_init,_road_load,_road_draw,_object_draw,_object_erase
+.export _digit_draw
+.export _road_prepare,_road_damage,_object_damaged,_object_damage,_object_slot
 .export _present,_wait_frame,_clock_read,_say_ready,_text
 .export _page,_scene,_road_phase,_road_pose,_engine_pitch,_engine_on,_muted
 .export _object_id,_object_x,_object_y,_object_w,_object_h,_geom
@@ -33,6 +35,7 @@ oldright: .res 1
 fill: .res 1
 dst2: .res 2
 attr2: .res 2
+pointer_cache: .res 2
 .segment "BSS"
 _page: .res 1
 _scene: .res 1
@@ -56,11 +59,23 @@ initial: .res 2
 old_revision: .res 2
 dirty: .res 1
 revision: .res 1
+geometry_dirty: .res 1
+; 0 clean, 1 stripes only, 2 changed geometry, 3 initial fill, 4 erased pixels.
+_road_damage: .res 56
+_object_slot: .res 1
 _geom: .res 392
 previous: .res 784
+pointer_x: .res 18
+pointer_y: .res 18
+pointer_h: .res 18
+pointer_slot: .res 1
+pointer_rows: .res 1
 cache: .res 2048
 blit_vector: .res 2
 .assert cache <= $1400 && cache+2048 >= $1500, lderror, "Sister bytes must stay inside disposable PCM scratch"
+.assert cache+1264 <= $1400, lderror, "Sprite pointers must not overlap sister bytes"
+.segment "SPRITECACHE"
+cache_first: .res 1264
 .segment "STARTUP"
 start:
     sei
@@ -95,6 +110,7 @@ start:
     jmp start
 .segment "RENDER"
 _engine_init:
+    jsr sprite_reset
     bit $C0D8
     bit $C0DA
     bit $C051
@@ -259,6 +275,7 @@ copy:
 :
     rts
 _scene_init:
+    jsr sprite_reset
     lda #$40
     sta $FFEF
     lda #0
@@ -397,7 +414,7 @@ road_store:
     lda #$40
     sta $FFEF
     rts
-_road_draw:
+_road_prepare:
     lda #<previous
     sta old
     lda #>previous
@@ -433,14 +450,125 @@ _road_draw:
     sta old_revision,x
     lda #0
     sta initial,x
+    lda dirty
+    sta geometry_dirty
     ldx _scene
     lda grounds,x
     sta ground
+    ; The seventh history field stores stripe phase; object projection uses
+    ; only the current geometry's seventh field (its road center).
+    clc
+    lda old
+    adc #<336
+    sta str
+    lda old+1
+    adc #>336
+    sta str+1
+    ldx #0
+@band:
+    lda dirty
+    cmp #2
+    beq @full
+    lda #0
+    sta tmp
+    lda dirty
+    beq @stripe
+    ; Compare six geometry fields, leaving the previous page intact until
+    ; erased sprite rectangles and displaced road edges have been restored.
+    txa
+    tay
+    lda _geom+0,x
+    cmp (old),y
+    bne @geometry
+    tya
+    clc
+    adc #56
+    tay
+    lda _geom+56,x
+    cmp (old),y
+    bne @geometry
+    tya
+    clc
+    adc #56
+    tay
+    lda _geom+112,x
+    cmp (old),y
+    bne @geometry
+    tya
+    clc
+    adc #56
+    tay
+    lda _geom+168,x
+    cmp (old),y
+    bne @geometry
+    clc
+    lda old
+    adc #<224
+    sta src
+    lda old+1
+    adc #>224
+    sta src+1
+    txa
+    tay
+    lda _geom+224,x
+    cmp (src),y
+    bne @geometry
+    tya
+    clc
+    adc #56
+    tay
+    lda _geom+280,x
+    cmp (src),y
+    beq @stripe
+@geometry:
+    lda #2
+    sta tmp
+    bne @stripe
+@full:
+    lda #3
+    sta tmp
+@stripe:
+    txa
+    tay
+    lda stripe_depth,x
+    clc
+    adc _road_phase
+    and #8
+    cmp (str),y
+    beq :+
+    ldy tmp
+    bne :+
+    inc tmp
+:
+    txa
+    tay
+    lda stripe_depth,x
+    clc
+    adc _road_phase
+    and #8
+    sta (str),y
+    lda tmp
+    sta _road_damage,x
+    inx
+    cpx #56
+    beq :+
+    jmp @band
+:
+    rts
+_road_draw:
     lda #64
     sta row
     lda #0
     sta band
 @row:
+    ldx band
+    lda _road_damage,x
+    bne :+
+    jmp @next
+:
+    sec
+    sbc #1
+    sta dirty
     jsr address
     lda dst
     sta dst2
@@ -459,7 +587,10 @@ _road_draw:
     lda _geom+56,x
     sta right
     lda dirty
+    beq @same_geometry
+    cmp #3
     bne :+
+@same_geometry:
     jmp @edges
 :
     ldy band
@@ -595,6 +726,21 @@ _road_draw:
     lda #$55
     sta (attr),y
     sta (attr2),y
+    lda dirty
+    bne @edge_pixels
+    ; Clipped lane markers can share an edge cell. Clearing a lane then
+    ; skipping its edge mask would leave a hole even on a stripe-only update.
+    lda _geom+224,x
+    cmp left
+    beq @edge_pixels
+    cmp right
+    beq @edge_pixels
+    lda _geom+280,x
+    cmp left
+    beq @edge_pixels
+    cmp right
+    bne @stripes
+@edge_pixels:
     lda ground
     and #15
     ora #$50
@@ -613,6 +759,7 @@ _road_draw:
     lda _geom+168,x
     sta (dst),y
     sta (dst2),y
+@stripes:
     lda stripe_depth,x
     clc
     adc _road_phase
@@ -668,7 +815,7 @@ _road_draw:
 @row_jump:
     jmp @row
 @done:
-    lda dirty
+    lda geometry_dirty
     bne :+
     rts
 :
@@ -680,9 +827,9 @@ _road_draw:
     sta dst
     lda old+1
     sta dst+1
-    lda #<392
+    lda #<336
     sta count
-    lda #>392
+    lda #>336
     sta count+1
     jmp copy
 ; Span is inclusive; final edge drawing supplies exact seven-pixel masks.
@@ -723,7 +870,67 @@ erase_pixel:
 :
     sta (attr),y
     rts
+; Carrying damage forward in painter order also redraws unchanged foreground
+; objects touched by an earlier object. Row granularity is conservative in X.
+object_bands:
+    lda _object_y
+    sec
+    sbc #64
+    lsr a
+    tax
+    lda _object_y
+    clc
+    adc _object_h
+    sec
+    sbc #65
+    lsr a
+    tay
+    rts
+_object_damaged:
+    jsr object_bands
+@band:
+    lda _road_damage,y
+    bne @yes
+    sty tmp
+    cpx tmp
+    beq @no
+    dey
+    bpl @band
+@no:
+    lda #0
+    tax
+    rts
+@yes:
+    lda #1
+    ldx #0
+    rts
+_object_damage:
+    jsr object_bands
+@band:
+    lda _road_damage,y
+    cmp #2
+    bcs :+
+    lda #4                  ; erased pixels need edges as well as stripes
+    sta _road_damage,y
+:
+    sty tmp
+    cpx tmp
+    beq @done
+    dey
+    bpl @band
+@done:
+    rts
 _object_erase:
+    jsr _object_damage
+    ldx _object_w
+    lda erase_attr_lo,x
+    sta src
+    lda erase_attr_hi,x
+    sta src+1
+    lda erase_pixel_lo,x
+    sta str
+    lda erase_pixel_hi,x
+    sta str+1
     lda _object_y
     sta row
     lda _object_h
@@ -760,17 +967,8 @@ _object_erase:
 @grass:
     lda ground
 @flat:
-    sta fill
     ldy _object_x
-    ldx _object_w
-@flatbyte:
-    lda #0
-    sta (dst),y
-    lda fill
-    sta (attr),y
-    iny
-    dex
-    bne @flatbyte
+    jsr erase_flat
     jmp @next
 @mixed:
     ldy _object_x
@@ -784,6 +982,26 @@ _object_erase:
     inc row
     dec height
     bne @row
+    rts
+; Width selects a suffix of these straight-line stores. Color and pixel
+; bytes each load A once for the whole span, with no per-byte branch.
+erase_flat:
+    jmp (src)
+.repeat 30, n
+.ident(.sprintf("erase_attr_%d", 30-n)):
+    sta (attr),y
+    iny
+.endrepeat
+erase_attr_0:
+    ldy _object_x
+    lda #0
+    jmp (str)
+.repeat 30, n
+.ident(.sprintf("erase_pixel_%d", 30-n)):
+    sta (dst),y
+    iny
+.endrepeat
+erase_pixel_0:
     rts
 _object_draw:
     ; Set up row pointers in the private extended-address zero page. Generated
@@ -800,32 +1018,80 @@ _object_draw:
     sta blit_vector+1
     lda _object_y
     sta row
+    ldx _object_slot
+    lda pointer_lo,x
+    sta pointer_cache
+    lda pointer_hi,x
+    sta pointer_cache+1
+    lda _object_x
+    cmp pointer_x,x
+    bne @build
+    lda _object_y
+    cmp pointer_y,x
+    bne @build
+    lda pointer_h,x
+    cmp height
+    bcc @build
+    cpx pointer_slot
+    bne @copy_cache
+    lda pointer_rows
+    cmp height
+    bcs @draw
+    ; A cached table already contains this page's exact native addresses.
+    ; Four bytes per row: pixel pointer, attribute pointer.
+@copy_cache:
     ldy #0
+@cached:
+    .repeat 4
+    lda (pointer_cache),y
+    sta $1800,y
+    iny
+    .endrepeat
+    dec height
+    bne @cached
+    beq @ready
+@build:
+    lda _object_x
+    sta pointer_x,x
+    lda _object_y
+    sta pointer_y,x
+    lda height
+    sta pointer_h,x
+    ldy #0
+    clc
 @pointers:
     ldx row
-    clc
+    ; Row starts plus a valid column never cross a 256-byte boundary.
     lda row_lo,x
     adc _object_x
     sta $1800,y
-    sta $1802,y
+    sta (pointer_cache),y
+    iny
     lda row_hi,x
-    adc _page
-    sta $1801,y
-    clc
+    ora _page
+    sta $1800,y
+    sta (pointer_cache),y
+    iny
+    lda row_lo,x
+    adc _object_x
+    sta $1800,y
+    sta (pointer_cache),y
+    iny
+    lda row_hi,x
+    ora _page
     adc #$20
-    sta $1803,y
-    lda #$8F
-    sta $1400,y
-    sta $1401,y
-    sta $1402,y
-    sta $1403,y
-    iny
-    iny
-    iny
+    sta $1800,y
+    sta (pointer_cache),y
     iny
     inc row
     dec height
     bne @pointers
+@ready:
+    lda _object_slot
+    sta pointer_slot
+    lda _object_h
+    sta pointer_rows
+@draw:
     ldx _object_id
     lda asset_bank,x
     ora #$40
@@ -847,6 +1113,35 @@ _object_draw:
     rts
 blit_jump:
     jmp (blit_vector)
+; HUD digits always occupy scanlines 0..7. Native row addresses can be
+; baked into stores; the general text routine still handles other labels.
+_digit_draw:
+    ora #$30
+    tax
+    lda font_lo,x
+    sta src
+    lda font_hi,x
+    sta src+1
+    ldx _gfx_x
+    lda _page
+    beq @first
+    .repeat 8, scanline
+    ldy #scanline
+    lda (src),y
+    sta $6000+scanline*$400,x
+    lda _gfx_color
+    sta $8000+scanline*$400,x
+    .endrepeat
+    rts
+@first:
+    .repeat 8, scanline
+    ldy #scanline
+    lda (src),y
+    sta $2000+scanline*$400,x
+    lda _gfx_color
+    sta $4000+scanline*$400,x
+    .endrepeat
+    rts
 _text:
     sta str
     stx str+1
@@ -921,8 +1216,34 @@ _say_ready:
     lda _pcm_remaining
     ora _pcm_remaining+1
     bne @wait
+    ; PCM shares disposable scratch with page-two address tables.
+    jmp sprite_reset
+sprite_reset:
+    lda #255
+    sta pointer_slot
+    ldx #17
+:
+    sta pointer_x,x
+    dex
+    bpl :-
+    ; These extended-address tags are invariant across every sprite/page.
+    ; Only speech can overwrite them; skylines use the first 80 cache bytes.
+    ldx #0
+    lda #$8F
+:
+    sta $1400,x
+    inx
+    bne :-
     rts
 .segment "RODATA"
 grounds: .byte $44,$88,$00,$22
 sky_lo: .byte <$2000,<$2C80,<$3900,<$4580
 sky_hi: .byte >$2000,>$2C80,>$3900,>$4580
+
+; Slots 0..2 cars, 3..4 tall scenery, 5..6 signs, 7 player, 8 gate.
+pointer_lo: .byte <(cache_first+0),<(cache_first+136),<(cache_first+272),<(cache_first+408),<(cache_first+608),<(cache_first+808),<(cache_first+944),<(cache_first+1080),<(cache_first+1216),<(cache+0),<(cache+136),<(cache+272),<(cache+408),<(cache+608),<(cache+808),<(cache+944),<(cache+1080),<(cache+1216)
+pointer_hi: .byte >(cache_first+0),>(cache_first+136),>(cache_first+272),>(cache_first+408),>(cache_first+608),>(cache_first+808),>(cache_first+944),>(cache_first+1080),>(cache_first+1216),>(cache+0),>(cache+136),>(cache+272),>(cache+408),>(cache+608),>(cache+808),>(cache+944),>(cache+1080),>(cache+1216)
+erase_attr_lo: .byte <erase_attr_0,<erase_attr_1,<erase_attr_2,<erase_attr_3,<erase_attr_4,<erase_attr_5,<erase_attr_6,<erase_attr_7,<erase_attr_8,<erase_attr_9,<erase_attr_10,<erase_attr_11,<erase_attr_12,<erase_attr_13,<erase_attr_14,<erase_attr_15,<erase_attr_16,<erase_attr_17,<erase_attr_18,<erase_attr_19,<erase_attr_20,<erase_attr_21,<erase_attr_22,<erase_attr_23,<erase_attr_24,<erase_attr_25,<erase_attr_26,<erase_attr_27,<erase_attr_28,<erase_attr_29,<erase_attr_30
+erase_attr_hi: .byte >erase_attr_0,>erase_attr_1,>erase_attr_2,>erase_attr_3,>erase_attr_4,>erase_attr_5,>erase_attr_6,>erase_attr_7,>erase_attr_8,>erase_attr_9,>erase_attr_10,>erase_attr_11,>erase_attr_12,>erase_attr_13,>erase_attr_14,>erase_attr_15,>erase_attr_16,>erase_attr_17,>erase_attr_18,>erase_attr_19,>erase_attr_20,>erase_attr_21,>erase_attr_22,>erase_attr_23,>erase_attr_24,>erase_attr_25,>erase_attr_26,>erase_attr_27,>erase_attr_28,>erase_attr_29,>erase_attr_30
+erase_pixel_lo: .byte <erase_pixel_0,<erase_pixel_1,<erase_pixel_2,<erase_pixel_3,<erase_pixel_4,<erase_pixel_5,<erase_pixel_6,<erase_pixel_7,<erase_pixel_8,<erase_pixel_9,<erase_pixel_10,<erase_pixel_11,<erase_pixel_12,<erase_pixel_13,<erase_pixel_14,<erase_pixel_15,<erase_pixel_16,<erase_pixel_17,<erase_pixel_18,<erase_pixel_19,<erase_pixel_20,<erase_pixel_21,<erase_pixel_22,<erase_pixel_23,<erase_pixel_24,<erase_pixel_25,<erase_pixel_26,<erase_pixel_27,<erase_pixel_28,<erase_pixel_29,<erase_pixel_30
+erase_pixel_hi: .byte >erase_pixel_0,>erase_pixel_1,>erase_pixel_2,>erase_pixel_3,>erase_pixel_4,>erase_pixel_5,>erase_pixel_6,>erase_pixel_7,>erase_pixel_8,>erase_pixel_9,>erase_pixel_10,>erase_pixel_11,>erase_pixel_12,>erase_pixel_13,>erase_pixel_14,>erase_pixel_15,>erase_pixel_16,>erase_pixel_17,>erase_pixel_18,>erase_pixel_19,>erase_pixel_20,>erase_pixel_21,>erase_pixel_22,>erase_pixel_23,>erase_pixel_24,>erase_pixel_25,>erase_pixel_26,>erase_pixel_27,>erase_pixel_28,>erase_pixel_29,>erase_pixel_30

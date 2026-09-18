@@ -20,13 +20,17 @@ uint16_t traffic_depth[4], simulation_ticks, last_clock, accumulator;
 uint8_t traffic_lane[4], traffic_color[4], car_hit[4];
 static uint8_t old_x[2*OBJECTS],old_y[2*OBJECTS],old_w[2*OBJECTS],old_h[2*OBJECTS];
 static uint8_t draw_depth[3], draw_used[3];
-static uint8_t old_id[2*OBJECTS], old_visible[2*OBJECTS];
-static uint8_t new_x[OBJECTS],new_y[OBJECTS],new_w[OBJECTS],new_h[OBJECTS],new_id[OBJECTS],new_visible[OBJECTS],order[OBJECTS],slot;
+static uint8_t old_id[2*OBJECTS], old_visible[2*OBJECTS], old_rank[2*OBJECTS];
+static uint8_t new_x[OBJECTS],new_y[OBJECTS],new_w[OBJECTS],new_h[OBJECTS],new_id[OBJECTS],new_visible[OBJECTS],order[OBJECTS],slot,changed[OBJECTS];
 static uint8_t drawn_count, buffer_index, pose_was, hill_was, scene_dark;
 static uint8_t hud_state[2], hud_speed[2], hud_seconds[2], hud_message[2];
 static uint16_t hud_score[2];
+static uint8_t hud_digits[2][10],hud_time_color[2];
 static const uint8_t radii[16]={1,1,1,1,2,2,3,4,5,6,7,9,10,12,14,16};
-static const uint8_t widths[16]={1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6};
+static const int8_t lane_centers[3]={-36,0,36};
+static const uint8_t stage_bends[3]={0,7,14};
+static const uint8_t scenery_kind[3]={64,80,96};
+static const uint16_t decimal_places[5]={10000,1000,100,10,1};
 uint16_t road_cost, object_cost, hud_cost, render_start;
 static uint16_t rng;
 static char digits[6];
@@ -43,6 +47,23 @@ static void number(uint8_t x,uint8_t y,uint16_t n,uint8_t length,uint8_t color)
     digits[length]=0;
     for(i=length;i;i--) { digits[i-1]='0'+n%10; n/=10; }
     label(x,y,color,digits);
+}
+/* Subtraction avoids cc65's general 16-bit divide/modulo helpers. Only
+   changed digits touch the hidden page; a warning-color change invalidates
+   both time digits even when the rounded seconds have not changed. */
+static void hud_number(uint8_t column,uint16_t value,uint8_t length,uint8_t offset,uint8_t color)
+{
+    uint8_t i,digit;
+    uint16_t place;
+    for(i=5-length;i<5;++i) {
+        place=decimal_places[i]; digit=0;
+        while(value>=place) { value-=place; ++digit; }
+        if(hud_digits[buffer_index][offset]!=digit) {
+            hud_digits[buffer_index][offset]=digit;
+            gfx_x=column; gfx_color=color; digit_draw(digit);
+        }
+        ++column; ++offset;
+    }
 }
 static uint8_t random_byte(void)
 {
@@ -75,6 +96,8 @@ static void backgrounds(void)
     hud_speed[0]=hud_speed[1]=255;
     hud_seconds[0]=hud_seconds[1]=255;
     hud_score[0]=hud_score[1]=65535U;
+    memset(hud_digits,255,sizeof(hud_digits));
+    hud_time_color[0]=hud_time_color[1]=255;
     redraw_scene=0;
 }
 static void title(void)
@@ -155,7 +178,7 @@ static void physics(void)
     if((player<-58||player>58)&&speed>65) speed-=3;
     if(speed>0) stage_distance+=speed>>3;
     road_phase=(uint8_t)(stage_distance>>5);
-    curve=4+bends[((stage_distance>>10)+stage*7)&31];
+    curve=4+bends[((stage_distance>>10)+stage_bends[stage])&31];
     hill=4+bends[((stage_distance>>11)+8)&31];
     was_tunnel=tunnel;
     tunnel=stage==0&&stage_distance>=14000&&stage_distance<19000;
@@ -165,7 +188,7 @@ static void physics(void)
         if(delta<0 && traffic_depth[i]<(uint16_t)-delta) traffic_depth[i]=0;
         else traffic_depth[i]+=delta;
         if(traffic_depth[i]>=14000 && !car_hit[i]) {
-            target=((int16_t)traffic_lane[i]-1)*36;
+            target=lane_centers[traffic_lane[i]];
             delta=player-target;
             if(delta>-16&&delta<16&&!crash_timer) {
                 speed=25; crash_timer=65; car_hit[i]=1;
@@ -192,10 +215,8 @@ static void physics(void)
 }
 static void paint_object(uint8_t id,int16_t x,uint8_t y)
 {
-    uint8_t w,h,scale;
-    scale=id&15;
-    if(id>=128) { w=scale==0?8:scale==1?14:scale==2?22:30; h=6+scale*2; }
-    else { w=id<64?widths[scale]:1+scale/4; h=id>=64&&id<80?5+scale*3:4+scale*2; }
+    uint8_t w,h;
+    w=asset_w[id]; h=asset_h[id];
     if(x<0||x+w>40||y<64||y+h>176||drawn_count>=OBJECTS) return;
     new_id[slot]=id; new_x[slot]=(uint8_t)x; new_y[slot]=y;
     new_w[slot]=w; new_h[slot]=h; new_visible[slot]=1;
@@ -204,16 +225,18 @@ static void paint_object(uint8_t id,int16_t x,uint8_t y)
 static void project(uint8_t kind,uint8_t scale,uint8_t lane)
 {
     uint8_t bottom,band,height;
-    int16_t x,radius;
+    int8_t x;
+    uint8_t radius,id;
     bottom=hill_bottoms[hill][scale]; band=(bottom-64)/2;
     radius=radii[scale]; x=geom[336+band];
     if(lane==0) x-=radius/2;
     else if(lane==2) x+=radius/2;
     else if(lane==3) x-=radius+3;
     else if(lane==4) x+=radius+3;
-    x-=(kind<64?widths[scale]:1+scale/4)/2;
-    height=kind==64?5+scale*3:4+scale*2;
-    paint_object(kind+scale,x,bottom-height);
+    id=kind+scale;
+    x-=asset_w[id]>>1;
+    height=asset_h[id];
+    paint_object(id,x,bottom-height);
 }
 static void objects(void)
 {
@@ -222,8 +245,8 @@ static void objects(void)
        sort only the three cars that can actually overlap one another. */
     for(i=0;i<4;i++) {
         slot=i+3;
-        depth=(uint8_t)(((stage_distance+i*4096U)&16383)>>10);
-        project(i<2?(tunnel?96:64+stage*16):112,depth,3+(i&1));
+        depth=((uint8_t)(stage_distance>>10)+(i<<2))&15;
+        project(i<2?(tunnel?96:scenery_kind[stage]):112,depth,3+(i&1));
     }
     for(i=0;i<3;i++) {
         draw_depth[i]=state==TITLE?(uint8_t)((i*5+(stage_distance>>9))&15):(uint8_t)(traffic_depth[i]>>10);
@@ -233,10 +256,10 @@ static void objects(void)
         min=255; k=0;
         for(i=0;i<3;i++) if(!draw_used[i]&&draw_depth[i]<min) { min=draw_depth[i]; k=i; }
         draw_used[k]=1; slot=k;
-        project(state==TITLE?16+k%3*16:traffic_color[k]*16,draw_depth[k],state==TITLE?k:traffic_lane[k]);
+        project(state==TITLE?16+(k<<4):traffic_color[k]*16,draw_depth[k],state==TITLE?k:traffic_lane[k]);
     }
     if((state==RACING&&stage_distance>=23000)||state==FINISHED) {
-        slot=8; depth=state==FINISHED?3:(stage_distance-23000)/500;
+        slot=8; depth=state==FINISHED?3:stage_distance<23500?0:stage_distance<24000?1:stage_distance<24500?2:3;
         if(depth>3) depth=3;
         paint_object(128+depth,depth==0?16:depth==1?13:depth==2?9:5,70+depth*20);
     }
@@ -249,9 +272,13 @@ static void hud(void)
     uint8_t seconds,message,b;
     b=buffer_index; seconds=(time_left+49)/50;
     if(state!=TITLE) {
-        if(hud_speed[b]!=speed) { number(6,0,speed,3,0xF0); hud_speed[b]=speed; }
-        if(hud_seconds[b]!=seconds) { number(16,0,seconds,2,time_left<500?0x90:0xD0); hud_seconds[b]=seconds; }
-        if(hud_score[b]!=score) { number(26,0,score,5,0xF0); hud_score[b]=score; }
+        if(hud_speed[b]!=speed) { hud_number(6,speed,3,0,0xF0); hud_speed[b]=speed; }
+        if(hud_time_color[b]!=(time_left<500)) {
+            hud_time_color[b]=time_left<500; hud_seconds[b]=255;
+            hud_digits[b][3]=hud_digits[b][4]=255;
+        }
+        if(hud_seconds[b]!=seconds) { hud_number(16,seconds,2,3,time_left<500?0x90:0xD0); hud_seconds[b]=seconds; }
+        if(hud_score[b]!=score) { hud_number(26,score,5,5,0xF0); hud_score[b]=score; }
     }
     message=state==RACING?(crash_timer?10:12+stage):state;
     if(state==READY) message=20+countdown/50;
@@ -288,9 +315,10 @@ static void render(void)
     if(road_pose!=pose_was||hill!=hill_was) { road_load(); pose_was=road_pose; hill_was=hill; }
     drawn_count=0; memset(new_visible,0,sizeof(new_visible));
     render_start=clock_read(); objects(); object_cost=clock_read()-render_start;
-    for(i=0;i<OBJECTS;i++) {
-        j=buffer_index*OBJECTS+i;
-        if(old_visible[j]&&(!new_visible[i]||old_id[j]!=new_id[i]||old_x[j]!=new_x[i]||old_y[j]!=new_y[i])) {
+    road_prepare();
+    for(i=0,j=buffer_index?OBJECTS:0;i<OBJECTS;i++,j++) {
+        changed[i]=!old_visible[j]||old_id[j]!=new_id[i]||old_x[j]!=new_x[i]||old_y[j]!=new_y[i];
+        if(old_visible[j]&&(!new_visible[i]||changed[i])) {
             object_x=old_x[j]; object_y=old_y[j];
             object_w=old_w[j]; object_h=old_h[j]; object_erase();
         }
@@ -299,8 +327,13 @@ static void render(void)
     render_start=clock_read(); road_draw(); road_cost=clock_read()-render_start;
     render_start=clock_read();
     for(i=0;i<drawn_count;i++) {
-        slot=order[i]; j=buffer_index*OBJECTS+slot;
-        object_id=new_id[slot]; object_x=new_x[slot]; object_y=new_y[slot]; object_draw();
+        slot=order[i]; j=(buffer_index?OBJECTS:0)+slot;
+        object_id=new_id[slot]; object_x=new_x[slot]; object_y=new_y[slot];
+        object_w=new_w[slot]; object_h=new_h[slot]; object_slot=j;
+        if(changed[slot]||old_rank[j]!=i||object_damaged()) {
+            object_draw(); object_damage();
+        }
+        old_rank[j]=i;
         old_id[j]=object_id; old_x[j]=object_x; old_y[j]=object_y;
         old_w[j]=object_w; old_h[j]=object_h;
     }

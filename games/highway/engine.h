@@ -3,7 +3,12 @@
 #include "apple3.h"
 extern uint8_t page, scene, road_phase, road_pose, engine_pitch, engine_on;
 extern uint8_t object_id, object_x, object_y, object_w, object_h;
-extern uint8_t geom[392];
+extern uint8_t geom[392], road_damage[56], object_slot;
+extern const uint8_t asset_w[132], asset_h[132];
+void road_prepare(void);
+uint8_t object_damaged(void);
+void object_damage(void);
+void __fastcall__ digit_draw(uint8_t digit);
 void engine_init(void);
 void scene_init(void);
 void road_load(void);
