@@ -6,7 +6,7 @@ GAME ?= invaders
 GAMES := $(notdir $(wildcard games/*))
 PLATFORM := $(wildcard platform/apple3/*.s) platform/apple3/game.cfg platform/apple3/apple3.h
 
-.PHONY: all run test clean
+.PHONY: all run test test-all clean
 all: $(foreach game,$(GAMES),build/$(game)/$(game).po)
 
 build/%/assets.s: games/%/sprites.json platform/apple3/font.json tools/assets.py
@@ -36,6 +36,10 @@ run: build/$(GAME)/$(GAME).po
 test: all
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py'
 	$(PYTHON) tools/mame.py test $(GAME)
+
+test-all: all
+	$(PYTHON) -m unittest discover -s tests -p 'test_*.py'
+	@for game in $(GAMES); do $(PYTHON) tools/mame.py test $$game || exit $$?; done
 
 clean:
 	$(PYTHON) -c "import shutil; from pathlib import Path; [shutil.rmtree(p) for p in Path('build').glob('*') if p.is_dir() and p.name != 'local-roms']"

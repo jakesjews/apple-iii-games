@@ -4,6 +4,16 @@ Native Apple /// games, built together in one repository. Each game boots direct
 from its own floppy image. Shared 6502 platform code handles graphics, frame
 timing, sound and booting; individual games live under `games/`.
 
+| Game | Style | Play |
+| --- | --- | --- |
+| Star Siege /// | Space Invaders-style shooter | `make run GAME=invaders` |
+| Blockfall /// | Tetris-style falling blocks | `make run GAME=tetris` |
+
+Both games use native 280×192 color graphics, original artwork and font, speaker
+effects, pause, mute and restart. They require at least 128 KB of RAM and the
+original Apple III boot ROM. No SOS disk, Apple II emulation, expansion card or
+downloaded game assets are needed.
+
 ## Star Siege ///
 
 A Space Invaders-style arcade game for the Apple III. Defend against 32 animated
@@ -14,10 +24,17 @@ repairs the shields and brings a faster fleet. Three lives, an extra life at
 
 ![Star Siege running in MAME](docs/images/star-siege.png)
 
-Native 280×192 color graphics, original pixel art and font, speaker effects,
-pause, mute and restart. Requires at least 128 KB of RAM and the original Apple
-III boot ROM. No SOS disk, Apple II emulation, expansion card or downloaded game
-assets are needed.
+## Blockfall ///
+
+A Tetris-style puzzle game with all seven tetrominoes, a shuffled seven-piece bag,
+next-piece preview, hold and a ghost landing guide. Rotate against walls and the
+floor, soft or hard drop, and clear up to four lines at once. Every ten lines
+raises the speed, up to level 20. A short lock delay gives you time to slide a
+piece into place. Best score stays in memory until reset.
+
+![Blockfall running in MAME](docs/images/blockfall.png)
+
+[Blockfall controls and rules](games/tetris/README.md)
 
 ## Build and play
 
@@ -27,7 +44,9 @@ Install [cc65](https://cc65.github.io/), Python 3.9 or later, Make and
 ```sh
 brew install cc65 mame
 make
-make run
+make run GAME=invaders
+# Or:
+make run GAME=tetris
 ```
 
 The emulator needs your Apple III ROM set. Put these files under the ignored
@@ -47,7 +66,9 @@ ROMs are not part of the repository or generated game disks. The launcher select
 the original BIOS explicitly, so the optional SOSHDBOOT ROM is not required.
 All emulator settings and snapshots stay under `build/`.
 
-| Action | `make run` in MAME | Native Apple III keyboard |
+Star Siege controls:
+
+| Action | MAME | Native Apple III keyboard |
 | --- | --- | --- |
 | Start / restart | Space or Return | Space or Return |
 | Move | Hold Left/Right or A/D | Hold Open/Solid Apple |
@@ -61,12 +82,28 @@ keys and Shift provide independent, continuous movement and firing. The MAME
 launcher maps modern controls onto those real hardware inputs. Close the MAME
 window to quit the emulator.
 
+Blockfall controls:
+
+| Action | MAME | Native Apple III keyboard |
+| --- | --- | --- |
+| Move | Hold Left/Right or A/D | Hold Open/Solid Apple; arrows or A/D also work |
+| Rotate clockwise / counterclockwise | Up or X / Z | Up or X / Z |
+| Soft drop | Hold Down or S | Hold Control; Down or S also work |
+| Hard drop | Space or Shift | Shift or Space |
+| Hold / swap piece | C | C |
+| Start / restart, pause, sound, title | Space/Return, P, M, Escape | Same |
+
+Holding the mapped hard-drop key places only one piece. Native character keys use
+the keyboard's repeat; Shift provides an independently readable hard-drop edge.
+
 ## Game disks
 
-`make` produces two 140 KB boot images of the same game:
+`make` builds both games, producing two 140 KB boot images per game:
 
-- `build/invaders/invaders.po` — ProDOS sector order; the default MAME image.
-- `build/invaders/invaders.dsk` — DOS sector order; convenient for the MiSTer core.
+| Game | ProDOS sector order (MAME default) | DOS sector order (MiSTer) |
+| --- | --- | --- |
+| Star Siege | `build/invaders/invaders.po` | `build/invaders/invaders.dsk` |
+| Blockfall | `build/tetris/tetris.po` | `build/tetris/tetris.dsk` |
 
 Mount either image in the Apple III's **internal / first floppy drive**, then
 reset or power on. Preserve the extension because it identifies the sector order.
@@ -80,18 +117,24 @@ and FPGA hardware validation remains to be done.
 ## Test
 
 ```sh
-make test
+make test-all                # Both games and disk packaging
+make test GAME=tetris        # Blockfall only, plus disk packaging
+make test GAME=invaders      # Star Siege only, plus disk packaging
 ```
 
 The tests cold-boot the actual disk in MAME, run the assembled 6502 game and save
-screenshots under `build/invaders/test/`. Failures return a nonzero exit status.
+screenshots under `build/<game>/test/`. Failures return a nonzero exit status.
 
 - Three Python checks cover disk geometry, ROM block ordering and boot payloads.
-- Thirty emulator checks cover native mode, controls, bounds, real shooting and
-  scoring, speaker accesses, pause, mute, shield damage, mystery-ship scoring,
+- Thirty Star Siege emulator checks cover native mode, controls, bounds, shooting
+  and scoring, speaker accesses, pause, mute, shield damage, mystery-ship scoring,
   extra lives, respawn protection, game over, restart and wave progression.
-- Six additional boot/control checks run the `.dsk` with 128 KB of RAM. The full
-  suite runs the `.po` with 256 KB.
+- Blockfall checks cover controls, hard-drop release, hold, all 28 piece/rotation
+  combinations, wall and floor kicks, blocked rotation, lock delay and its reset
+  limit, one-to-four-line clears, board compaction, scoring, speed progression,
+  the seven-piece bag, top-out, pause, sound, restart and program integrity.
+- Each full suite runs the `.po` with 256 KB. Additional boot/control checks run
+  both `.dsk` images with 128 KB of RAM.
 
 The first gameplay tests use only emulated key presses. Later tests arrange rare
 collision and end-of-wave situations in RAM, then let the game's actual code
@@ -111,6 +154,7 @@ make
 make run GAME=<name>
 ```
 
-Add `tests/<name>.lua` to enable `make test GAME=<name>`. See
-[the platform guide](docs/platform.md) for the memory map, graphics API, asset
+Add `tests/<name>.lua` to enable `make test GAME=<name>` and include the game in
+`make test-all`. An optional `games/<name>/controls.lua` customizes MAME controls.
+See [the platform guide](docs/platform.md) for the memory map, graphics API, asset
 format, boot contract and source references.

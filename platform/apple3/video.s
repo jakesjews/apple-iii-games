@@ -1,5 +1,6 @@
 .setcpu "6502"
 .export _video_init, _video_clear, _wait_frame, _video_sprite, _video_text
+.export _video_tile
 .export _video_pixel, _video_read_pixel, _gfx_x, _gfx_y, _gfx_color
 .export _gfx_band_y, _gfx_band_color
 .import sprite_lo, sprite_hi, font_lo, font_hi
@@ -148,6 +149,24 @@ _video_text:
     sta src
     lda font_hi,x
     sta src+1
+    jsr draw_cell
+    inc str
+    bne :+
+    inc str+1
+:
+    inc column
+    lda column
+    cmp #40
+    bcc @char
+@done:
+    rts
+
+_video_tile:
+    sta src
+    stx src+1
+    lda _gfx_x
+    sta column
+draw_cell:
     lda _gfx_y
     sta line
     lda #0
@@ -169,15 +188,6 @@ _video_text:
     lda rows
     cmp #8
     bne @row
-    inc str
-    bne :+
-    inc str+1
-:
-    inc column
-    lda column
-    cmp #40
-    bcc @char
-@done:
     rts
 
 pixel_address:

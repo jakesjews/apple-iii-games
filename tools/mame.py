@@ -45,7 +45,10 @@ def main() -> None:
     if not (ROOT / "games" / args.game / "main.c").is_file():
         parser.error(f"Unknown game: {args.game}")
     headless = args.action == "test"
-    script = args.script or (ROOT / "tests" / (args.game + ".lua") if headless else ROOT / "tools/controls.lua")
+    controls = ROOT / "games" / args.game / "controls.lua"
+    if not controls.exists():
+        controls = ROOT / "tools/controls.lua"
+    script = args.script or (ROOT / "tests" / (args.game + ".lua") if headless else controls)
     env = os.environ.copy()
     if headless:
         env["SDL_VIDEODRIVER"] = "dummy"

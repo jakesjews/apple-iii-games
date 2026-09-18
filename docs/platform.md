@@ -10,6 +10,7 @@ engine, SOS or an Apple II runtime.
 ```text
 games/<game>/main.c          game rules, state and screen composition
 games/<game>/sprites.json    original, editable pixel art
+games/<game>/controls.lua    optional MAME keyboard mapping
 platform/apple3/             shared native hardware code and font
 tools/assets.py             sprite shifts and font tables
 tools/disk.py               boot block and disk image construction
@@ -70,6 +71,9 @@ background nibble. `gfx_y` is always a pixel scanline.
   are `x = 0..255`, `y = 0..184`; the renderer does not clip.
 - `video_text(string)` writes the original 5×7 font in 7×8 cells. Here `gfx_x` is
   a text column, `0..39`. Strings stop at the right edge. Use uppercase ASCII.
+- `video_tile(pattern)` overwrites a 7×8 cell from eight row bytes, bit 0 at the
+  left. Like text, `gfx_x` is a column (`0..39`); `gfx_y` must be `0..184`.
+  This primitive does not clip. Blockfall aligns its board with these color cells.
 - `video_pixel(set)` and `video_read_pixel()` address one pixel, with `x <= 255`
   and `y <= 191`. The read returns zero or the set bit's mask.
 - `gfx_band_y` / `gfx_band_color` optionally keep sprites below a given scanline
@@ -95,6 +99,8 @@ Sprites are JSON objects mapping names to eight strings of at most 14 characters
 `#` is a pixel and `.` is transparent. The generator pads rows and produces all
 seven horizontal shifts as three 7-bit bytes per scanline. It also generates C
 IDs in `assets.h`. The font source lives in `platform/apple3/font.json`.
+Games using tiles rather than sprites can supply an empty JSON object; the font
+is still generated. Text and tiles share the same scanline writer.
 
 Read keys from `$C000` and **write to `$C010` to acknowledge** them. The installed
 cc65 optimizer removed a discarded `(void)` volatile read, which caused repeated
@@ -102,6 +108,9 @@ keys; the write is required and the pause test protects this behavior. Modifier
 bits in `$C008` let the two Apple keys and Shift work simultaneously. The MAME
 launcher maps host A/Left, D/Right and Space onto these modifier inputs through
 MAME's standard input API. It does not synthesize game state.
+Blockfall adds Control for held soft drop. Its Shift edge detects hard drop and
+ignores a duplicate Space character on the release tick. A per-game
+`controls.lua` overrides the default mapping in `tools/mame.py`.
 
 ## Verification and references
 
@@ -111,6 +120,14 @@ about to hit, the final invader, and a fleet about to breach the shield line.
 These exercise the actual compiled collision and transition code. Fixture
 screenshots are diagnostic, not evidence of a complete unassisted playthrough.
 The documentation's gameplay screenshot comes from the input-only section.
+
+`tests/tetris.lua` likewise starts with keyboard-only play, including simultaneous
+Space/Shift press and release, movement, hold, rotation, pause and sound. Its board
+fixtures cover every piece and rotation, kicks and blocked rotation, grounded
+lock delay, all four line-clear counts and row compaction, bag order, level
+progression and both spawn/hidden-row top-out. Tests verify that gameplay has not
+overwritten the loaded program. `make test-all` runs both games and the shared
+disk checks; each game boots with both disk orders and with 128 KB and 256 KB RAM.
 
 MAME validation is distinct from physical or FPGA validation. The generated disks
 are ready for a hardware smoke test, but no hardware result is claimed here.

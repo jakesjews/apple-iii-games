@@ -19,6 +19,9 @@ void video_clear(void);
 void wait_frame(void);
 void __fastcall__ video_sprite(uint8_t sprite);
 void __fastcall__ video_text(const char *text);
+/* Overwrite one 7x8 cell from eight row bytes (bit 0 is the left pixel).
+ * gfx_x is a character column, like video_text. */
+void __fastcall__ video_tile(const uint8_t *pattern);
 void __fastcall__ video_pixel(uint8_t set);
 uint8_t video_read_pixel(void);
 void __fastcall__ sound(uint8_t effect);
