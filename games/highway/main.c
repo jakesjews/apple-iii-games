@@ -16,7 +16,7 @@ uint8_t steer_left, steer_right, countdown, passed, previous_state;
 uint8_t curve, tick_divider, action_timer, redraw_scene, voice_pending;
 int16_t player;
 uint16_t frame_counter, stage_distance, time_left, score, best;
-uint16_t traffic_depth[4], simulation_ticks, last_clock, accumulator;
+uint16_t traffic_depth[4], traffic_gap[4], simulation_ticks, last_clock, accumulator;
 uint8_t traffic_lane[4], traffic_color[4], car_hit[4];
 static uint8_t old_x[2*OBJECTS],old_y[2*OBJECTS],old_w[2*OBJECTS],old_h[2*OBJECTS];
 static uint8_t draw_depth[3], draw_used[3];
@@ -113,7 +113,7 @@ static void start_game(void)
     time_left=45*50; countdown=150; crash_timer=0;
     tick_divider=0; simulation_ticks=0; engine_on=0;
     for(i=0;i<4;i++) {
-        traffic_depth[i]=i*3500; traffic_lane[i]=i%3;
+        traffic_depth[i]=i*3500; traffic_gap[i]=3500; traffic_lane[i]=i%3;
         traffic_color[i]=1+i%3; car_hit[i]=0;
     }
     redraw_scene=1; voice_pending=1;
@@ -146,6 +146,16 @@ static void controls(void)
         if(state==PAUSED) state=previous_state;
         else if(state==RACING||state==READY) { previous_state=state; state=PAUSED; }
     }
+}
+/* Traffic faster than the player collects at the horizon. Each car waits there
+   until the car ahead has opened its gap, so cars can never bunch into a wall
+   across every lane; the shortest gap still exceeds the contact zone. */
+static uint8_t horizon_clear(uint8_t car)
+{
+    uint8_t j;
+    for(j=0;j<3;j++)
+        if(j!=car&&traffic_depth[j]&&traffic_depth[j]<traffic_gap[car]) return 0;
+    return 1;
 }
 static void physics(void)
 {
@@ -186,7 +196,7 @@ static void physics(void)
     for(i=0;i<3;i++) {
         delta=(int16_t)speed-65;
         if(delta<0 && traffic_depth[i]<(uint16_t)-delta) traffic_depth[i]=0;
-        else traffic_depth[i]+=delta;
+        else if(traffic_depth[i]||horizon_clear(i)) traffic_depth[i]+=delta;
         if(traffic_depth[i]>=14000 && !car_hit[i]) {
             target=lane_centers[traffic_lane[i]];
             delta=player-target;
@@ -198,7 +208,7 @@ static void physics(void)
         }
         if(traffic_depth[i]>=16384) {
             if(!car_hit[i]) { add_score(100); if(passed<255) ++passed; }
-            traffic_depth[i]=random_byte()*4;
+            traffic_depth[i]=0; traffic_gap[i]=3072+(random_byte()<<4);
             traffic_lane[i]=random_byte()%3;
             traffic_color[i]=1+random_byte()%3; car_hit[i]=0;
         }

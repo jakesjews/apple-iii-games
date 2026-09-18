@@ -152,6 +152,25 @@ t.run(function()
     local score=t.word('score'); t.ticks(3)
     t.check(t.word('score')>=score+100,'clean overtake awards points')
 
+    -- Idling lets all traffic escape to the horizon; it must return one car at a time.
+    fixture()
+    for car=0,2 do t.array('traffic_lane',car,car); t.mem:write_u16(t.addr('traffic_gap')+car*2,3500) end
+    local spaced,together=true,0
+    for _=1,24 do
+        t.write('speed',200); t.ticks(1)
+        local moving=0
+        for a=0,2 do
+            local da=t.mem:read_u16(t.addr('traffic_depth')+a*2)
+            if da>0 then moving=moving+1 end
+            for b=a+1,2 do
+                local db=t.mem:read_u16(t.addr('traffic_depth')+b*2)
+                if da>0 and db>0 and math.abs(da-db)<2900 then spaced=false end
+            end
+        end
+        together=math.max(together,moving)
+    end
+    t.check(together>=2 and spaced,'bunched traffic leaves the horizon spaced apart, never as a wall')
+
     fixture(); t.writeword('stage_distance',13990); t.write('speed',120); t.ticks(4)
     t.check(t.read('scene')==3 and t.read('tunnel')==1,'coast enters the lighthouse tunnel')
     t.ticks(1); t.snapshot('tunnel')
