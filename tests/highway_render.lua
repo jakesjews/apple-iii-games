@@ -71,4 +71,28 @@ t.run(function()
     t.check(true,'timer warning recolors unchanged digits on both pages')
     t.writeword('score',2000); t.ticks(3)
     rebuild_matches(0,7,'digit carries and timer warning match complete HUD reconstruction')
+
+    -- Stripe changes under stationary traffic must use the partial blitters.
+    -- Watch the actual row flags at the native draw entry, then compare every
+    -- pixel against full reconstruction, including propagation to foregrounds.
+    t.write('curve',4); t.write('hill',4); t.writeword('player',0)
+    t.write('road_phase',0); t.writeword('stage_distance',0)
+    t.write('crash_timer',0)
+    for car=0,2 do
+        t.mem:write_u16(t.addr('traffic_depth')+car*2,car==0 and 13000 or 0)
+        t.array('traffic_lane',car,1)
+    end
+    t.write('redraw_scene',1); t.ticks(3)
+    local partial=false
+    tap=t.mem:install_read_tap(t.addr('object_draw'),t.addr('object_draw'),'partial-sprite',function()
+        local drawn,skipped=false,false
+        for pair=0,math.floor((t.read('object_h')-1)/2) do
+            if t.mem:read_u8(0x700+pair)==0 then skipped=true else drawn=true end
+        end
+        if drawn and skipped then partial=true end
+    end)
+    for phase=1,8 do t.write('road_phase',phase); t.ticks(2) end
+    tap:remove()
+    t.check(partial,'stationary sprites redraw only affected pairs of rows')
+    rebuild_matches(64,175,'partial sprite repairs preserve both pages exactly')
 end)

@@ -16,6 +16,7 @@ def offset(y):
 # 81 road poses: nine bends by nine lateral camera positions, 56 two-line bands.
 road = bytearray()
 road_addresses = []
+road_marks = bytearray()
 for curve in range(-4,5):
     for player in range(-4,5):
         road_addresses.append(0x2000+len(road))
@@ -31,6 +32,9 @@ for curve in range(-4,5):
                     max(0,min(39,round(center+radius/3)//7)), round(center)//7]
             for arr,val in zip(fields,vals): arr.append(val)
         road.extend(v for arr in fields for v in arr)
+        for row in range(56):
+            columns=(fields[0][row],fields[0][row]+1,fields[1][row],fields[1][row]-1,fields[4][row],fields[5][row])
+            road_marks.append(sum(1<<region for region in {x//5 for x in columns if 0<=x<40}))
 assert len(road) == 31752
 banks = [road.ljust(32768,b'\0'), bytearray(), bytearray(), bytearray()]
 meta = []
@@ -122,65 +126,108 @@ for scene in range(4):
 voice_offset=len(banks[3]); voice=Path('games/highway/ready.pcm').read_bytes()
 assert len(voice)==2048 and max(voice)<64
 banks[3].extend(voice)
-# Compile sprites into straight-line 6502 stores. Each row uses two native
-# extended-address pointers, allowing code in an asset bank to draw bank zero.
-# Four car colors share the same code through an indexed attribute palette.
-banks[1].extend(bytes((((([1,12,7,13][v] if a>>4==9 else a>>4)<<4) |
-                       ([1,12,7,13][v] if a&15==9 else a&15)))
-                      for a in range(256) for v in range(4)))
-def compiled(img, car=False):
+# Each pair of rows can be skipped independently through flags in private
+# shared flags $0700..$0718. Car colors are immediate operands, not palette reads.
+def compiled(img, base, color=None):
     data=pack(img); w=len(img[0])//7; code=bytearray()
-    for row in range(len(img)):
-        code.extend((0xA0,0))  # LDY #0; horizontal position is in the row pointers
-        for col in range(w):
-            mask,pixel,attr=(data[row*w*3+col+k*w] for k in range(3))
-            zp=row*4
-            if mask:
-                if mask==127:
-                    code.extend((0xA9,pixel,0x91,zp))
-                else:
-                    code.extend((0xB1,zp,0x29,127^mask,0x09,pixel,0x91,zp))
-                if car:
-                    # Palette contains the complete opaque attribute and, in a
-                    # second table, the foreground nibble for boundary cells.
-                    address=0x2000+(1024 if mask!=127 else 0)+attr*4
-                    code.extend((0xBD,address&255,address>>8))
-                    if mask!=127:
-                        code.extend((0x85,0xF1,0xB1,zp+2,0x29,15,0x05,0xF1))
-                elif mask==127:
-                    code.extend((0xA9,attr))
-                else:
-                    code.extend((0xB1,zp+2,0x29,15,0x09,attr&240))
-                code.extend((0x91,zp+2))
-            if col+1<w: code.append(0xC8) # INY
+    for pair in range(0,len(img),2):
+        chunk=bytearray()
+        for row in range(pair,min(pair+2,len(img))):
+            chunk.extend((0xA0,0))
+            for col in range(w):
+                mask,pixel,attr=(data[row*w*3+col+k*w] for k in range(3))
+                zp=row*4
+                if color is not None:
+                    fg,bg=attr>>4,attr&15
+                    attr=((color if fg==9 else fg)<<4)|(color if bg==9 else bg)
+                if mask:
+                    if mask==127: chunk.extend((0xA9,pixel,0x91,zp))
+                    else: chunk.extend((0xB1,zp,0x29,127^mask,0x09,pixel,0x91,zp))
+                    if mask==127: chunk.extend((0xA9,attr))
+                    else: chunk.extend((0xB1,zp+2,0x29,15,0x09,attr&240))
+                    chunk.extend((0x91,zp+2))
+                if col+1<w: chunk.append(0xC8)
+        code.extend((0xAD,pair//2,0x07))
+        if len(chunk)<=127: code.extend((0xF0,len(chunk)))
+        else:
+            target=base+len(code)+5+len(chunk)
+            code.extend((0xD0,3,0x4C,target&255,target>>8))
+        code.extend(chunk)
     code.append(0x60)
     return code
-banks[1].extend(bytes(v&240 for v in banks[1][:1024]))
-car_meta=[]
-for scale in range(16):
-    cols=1+scale//3; height=4+scale*2
-    data=compiled(raster('car',cols*7,height),True)
-    car_meta.append((2,0x2000+len(banks[1]),cols,height,len(data)))
-    banks[1].extend(data)
-for variant in range(4): meta.extend(car_meta)
+
+def compress(data):
+    """Literal runs (1..127) or backreferences (length 3..130, 16-bit distance).
+
+    Expanded code lives in spare banks five/six; only compressed bytes occupy
+    the floppy. Zero terminates the stream. Matches may overlap their source.
+    """
+    from collections import defaultdict
+    positions=defaultdict(list); output=bytearray(); literals=bytearray(); pos=0
+    def flush():
+        if literals: output.append(len(literals)); output.extend(literals); literals.clear()
+    while pos<len(data):
+        best=0; distance=0
+        for candidate in reversed(positions[bytes(data[pos:pos+3])][-96:]):
+            length=3
+            while length<130 and pos+length<len(data) and data[candidate+length]==data[pos+length]: length+=1
+            if length>best: best=length; distance=pos-candidate
+        count=best if best>=4 else 1
+        if best>=4:
+            flush(); output.extend((128+best-3,distance&255,distance>>8))
+        else:
+            literals.append(data[pos])
+            if len(literals)==127: flush()
+        for i in range(pos,pos+count): positions[bytes(data[i:i+3])].append(i)
+        pos+=count
+    flush(); output.append(0)
+    return output
+
+expanded=[bytearray(),bytearray()]
+for variant,color in enumerate((1,12,7,13)):
+    bank=variant//2
+    for scale in range(16):
+        cols=1+scale//3; height=4+scale*2
+        base=0x2000+len(expanded[bank])
+        data=compiled(raster('car',cols*7,height),base,color)
+        meta.append((5+bank,base,cols,height,len(data)))
+        expanded[bank].extend(data)
+# Precompute road footprints too; their 81x56 bytes fit after bank-five cars.
+road_mark_addresses=[0x2000+len(expanded[0])+i*56 for i in range(81)]
+expanded[0].extend(road_marks)
+expand_addresses=[]
+for i,data in enumerate(expanded):
+    assert len(data)<=32768
+    (OUT/f'cars{i+5}.bin').write_bytes(data)
+    expand_addresses.append(0x2000+len(banks[1]))
+    packed=compress(data); banks[1].extend(packed)
+    print(f'Car bank {i+5}: {len(data)} bytes expanded from {len(packed)} bytes')
 for kind in ['palm','cactus','tower','sign']:
     for scale in range(16):
         cols=1+scale//4; height=5+scale*3 if kind=='palm' else 4+scale*2
-        data=compiled(raster(kind,cols*7,height))
-        bank=next(i for i,capacity in ((1,32768),(2,32768),(3,24576)) if len(banks[i])+len(data)<=capacity)
+        img=raster(kind,cols*7,height)
+        size=len(compiled(img,0))
+        bank=next(i for i,capacity in ((1,32768),(2,32768),(3,24576)) if len(banks[i])+size<=capacity)
+        data=compiled(img,0x2000+len(banks[bank]))
         meta.append((bank+1,0x2000+len(banks[bank]),cols,height,len(data)))
         banks[bank].extend(data)
 for scale,(cols,height) in enumerate(((8,6),(14,8),(22,10),(30,12))):
     img=[[15 if ((x//7)+(y//2))%2 else 0 for x in range(cols*7)] for y in range(height)]
-    data=compiled(img)
-    meta.append((4,0x2000+len(banks[3]),cols,height,len(data)))
-    banks[3].extend(data)
+    size=len(compiled(img,0))
+    bank=next(i for i,capacity in ((1,32768),(2,32768),(3,24576)) if len(banks[i])+size<=capacity)
+    data=compiled(img,0x2000+len(banks[bank]))
+    meta.append((bank+1,0x2000+len(banks[bank]),cols,height,len(data)))
+    banks[bank].extend(data)
 print('Asset bytes by bank:',*[len(b) for b in banks])
 for i,size in enumerate((32768,32768,32768,24576)):
     assert len(banks[i])<=size
     banks[i]=banks[i].ljust(size,b'\0')
 (OUT/'banks.bin').write_bytes(b''.join(banks))
 s='.segment "RODATA"\n'
+s+=emit('mark_lo',[p&255 for p in road_mark_addresses])+emit('mark_hi',[p>>8 for p in road_mark_addresses])
+s+=emit('expand_lo',[p&255 for p in expand_addresses])+emit('expand_hi',[p>>8 for p in expand_addresses])
+s+=emit('column_left',[(255<<(x//5))&255 for x in range(40)])
+s+=emit('column_right',[(1<<(x//5+1))-1 for x in range(40)])
 s+=emit('road_lo',[p&255 for p in road_addresses])+emit('road_hi',[p>>8 for p in road_addresses])
 for name,col in [('asset_bank',0),('asset_lo',1),('asset_hi',1),('asset_w',2),('asset_h',3),('asset_size_lo',4),('asset_size_hi',4)]:
     vals=[m[col] for m in meta]

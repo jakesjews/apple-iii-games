@@ -26,6 +26,15 @@ local function integrity()
     end
     t.mem:write_u8(0xFFEF,0x40)
     t.check(true,'all four loaded asset banks remain byte-for-byte intact')
+    for bank=5,6 do
+        f=assert(io.open('build/highway/cars'..bank..'.bin','rb')); bytes=f:read('a'); f:close()
+        t.mem:write_u8(0xFFEF,0x40+bank)
+        for i=1,#bytes do
+            assert(t.mem:read_u8(0x1fff+i)==bytes:byte(i),string.format('expanded car corruption bank %d offset %04x',bank,i-1))
+        end
+    end
+    t.mem:write_u8(0xFFEF,0x40)
+    t.check(true,'both runtime-expanded car banks match the generated machine code')
     f=assert(io.open('build/highway/code.bin','rb')); bytes=f:read('a'); f:close()
     local symbols={}
     for line in io.lines('build/highway/highway.lbl') do local a,n=line:match('al (%x+) %.(%S+)'); if n then symbols[n]=tonumber(a,16) end end

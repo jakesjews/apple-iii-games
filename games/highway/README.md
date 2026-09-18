@@ -70,13 +70,16 @@ No physical MiSTer play test has been claimed.
   group, with two complete graphics pages in bank zero.
 - **81 road poses** with nine hill profiles. The renderer updates changed road
   boundaries and markings using damage tracked separately for each graphics page.
-  Unchanged sprites are retained unless road or object updates affect their rows.
+  Eight horizontal regions per two-line band prevent unrelated changes from
+  invalidating the full width. Sprite routines skip untouched pairs of rows.
 - **128 car/scenery variants** plus four checkpoint banners, compiled into 6502
-  drawing routines. Four car colors share code through indexed palettes.
+  drawing routines. Car colors use specialized immediate operands; compressed
+  routines expand into spare RAM once at startup.
 - Native **extended addressing** lets those routines execute in an asset bank
   while their stores reach the hidden graphics page. Scaling happens at build
-  time, rather than during play. Sprite row addresses are cached per object and
-  graphics page; flat erasure spans and HUD digits use unrolled assembly stores.
+  time, rather than during play. Car row addresses stay in eight relocated zero
+  pages, avoiding repeated address-table copies. Scenery borrows one page and
+  invalidates its car cache. Flat erasure spans and HUD digits use unrolled stores.
 - The **6-bit DAC** plays a short “Get ready” sample and a continuous engine
   tone. A 2 kHz VIA interrupt also supplies the clock for 50 Hz driving physics.
   The joystick keeps the other VIA's timer 2 for ADC measurements.
@@ -93,18 +96,22 @@ sprites or scaling.
 
 | Region | Purpose |
 | --- | --- |
-| System `$0200–$06EF` | First-page sprite address cache |
+| System `$0700–$0718` | Shared sprite row-pair draw flags |
 | System `$A200–$BFFF`, `$D000–$EFFF` | Program, renderer, font, tables |
-| System `$0800–$17FF` | Variables, geometry history, PCM/skyline scratch and second-page sprite cache |
-| System `$1800–$18FF` | Private relocated zero page during compiled drawing |
-| System `$1400–$14FF` | Extended-address sister bytes; shares scratch after PCM |
-| System `$1C00–$1FFF` | C stack reserve |
+| System `$0800–$0FFF` | Variables, geometry history and damage masks |
+| System `$1000–$17FF` | PCM/skyline scratch, then extended-address sister bytes |
+| System `$1800–$1FFF` | Eight resident sprite address tables / relocated zero pages |
+| System `$A000–$A1FF` | Boot loader, then 512-byte C software stack |
 | Bank 0 | Two 16 KB graphics pages |
-| Banks 1–3 | Road tables and compiled sprite routines |
-| Bank 4, first 24 KB | Skylines, speech and checkpoint banners |
+| Banks 1–3 | Road tables, compressed car code, compiled scenery/banner routines |
+| Bank 4, first 24 KB | Skylines, speech and remaining drawing routines |
+| Bank 5 | Expanded car routines and precomputed road damage masks (30,798 bytes) |
+| Bank 6 | Expanded car routines (26,262 bytes) |
 
-The code uses only the lower portion of the declared variable region, below the
-private drawing zero page; the linker and runtime test protect that separation.
+The linker separates permanent variables from disposable scratch and private
+zero pages. Speech and skyline loading restore sister bytes before drawing;
+boot memory is reused only after the loader has finished. Runtime checks compare
+both expanded banks against the generated code and tables.
 The 140 KiB disk contains a 512-byte loader, 15,872 bytes of system-bank program
 space, and 122,880 bytes of asset-bank space, including padding. The loader uses
 the machine's original ROM disk API and handles block numbers above 255.

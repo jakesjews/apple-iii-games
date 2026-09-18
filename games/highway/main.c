@@ -330,9 +330,8 @@ static void render(void)
         slot=order[i]; j=(buffer_index?OBJECTS:0)+slot;
         object_id=new_id[slot]; object_x=new_x[slot]; object_y=new_y[slot];
         object_w=new_w[slot]; object_h=new_h[slot]; object_slot=j;
-        if(changed[slot]||old_rank[j]!=i||object_damaged()) {
-            object_draw(); object_damage();
-        }
+        object_full=changed[slot]||old_rank[j]!=i;
+        if(object_damaged()) { object_draw(); object_damage(); }
         old_rank[j]=i;
         old_id[j]=object_id; old_x[j]=object_x; old_y[j]=object_y;
         old_w[j]=object_w; old_h[j]=object_h;

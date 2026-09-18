@@ -2,7 +2,7 @@
 .export __STARTUP__ : absolute = 1
 .export _engine_init,_scene_init,_road_load,_road_draw,_object_draw,_object_erase
 .export _digit_draw
-.export _road_prepare,_road_damage,_object_damaged,_object_damage,_object_slot
+.export _road_prepare,_road_damage,_object_damaged,_object_damage,_object_slot,_object_full
 .export _present,_wait_frame,_clock_read,_say_ready,_text
 .export _page,_scene,_road_phase,_road_pose,_engine_pitch,_engine_on,_muted
 .export _object_id,_object_x,_object_y,_object_w,_object_h,_geom
@@ -12,7 +12,7 @@
 .import hill_lo,hill_hi
 .import road_lo,road_hi,asset_bank,asset_lo,asset_hi,asset_w,asset_h
 .import asset_size_lo,asset_size_hi,row_lo,row_hi,stripe_depth,waveform
-.import font_lo,font_hi,voice_address
+.import font_lo,font_hi,voice_address,expand_lo,expand_hi,column_left,column_right,mark_lo,mark_hi
 .segment "ZEROPAGE"
 src: .res 2
 dst: .res 2
@@ -63,19 +63,25 @@ geometry_dirty: .res 1
 ; 0 clean, 1 stripes only, 2 changed geometry, 3 initial fill, 4 erased pixels.
 _road_damage: .res 56
 _object_slot: .res 1
+_object_full: .res 1
+damage_columns: .res 56
+object_mask: .res 1
+object_any: .res 1
+flags_full: .res 1
+expand_bank: .res 1
 _geom: .res 392
 previous: .res 784
 pointer_x: .res 18
 pointer_y: .res 18
 pointer_h: .res 18
-pointer_slot: .res 1
-pointer_rows: .res 1
-cache: .res 2048
+pointer_page: .res 1
+road_marks: .res 56
+previous_marks: .res 112
 blit_vector: .res 2
-.assert cache <= $1400 && cache+2048 >= $1500, lderror, "Sister bytes must stay inside disposable PCM scratch"
-.assert cache+1264 <= $1400, lderror, "Sprite pointers must not overlap sister bytes"
-.segment "SPRITECACHE"
-cache_first: .res 1264
+.segment "SCRATCH"
+; Speech/skyline scratch becomes the eight extended-address sister pages.
+cache: .res 2048
+.assert cache = $1000, lderror, "Sister pages must cover $1000..$17FF"
 .segment "STARTUP"
 start:
     sei
@@ -90,9 +96,11 @@ start:
     sta $FFDE
     sta $FFEE
     sta $C0F1
-    lda #<$2000
+    ; The boot block is disposable after loading: reuse its 512 bytes for
+    ; the C software stack, leaving all eight private zero pages resident.
+    lda #<$A200
     sta sp
-    lda #>$2000
+    lda #>$A200
     sta sp+1
     jsr zerobss
     ; RAM vectors are written beneath the ROM, then the ROM is disabled.
@@ -110,6 +118,7 @@ start:
     jmp start
 .segment "RENDER"
 _engine_init:
+    jsr expand_cars
     jsr sprite_reset
     bit $C0D8
     bit $C0DA
@@ -136,6 +145,97 @@ _engine_init:
     lda #$C0
     sta $FFEE
     cli
+    rts
+; Expand color-specialized car code into spare banks five/six once at boot.
+; The source remains read-only in bank two. Only startup pays for switching
+; banks for literal bytes; rendering runs straight-line immediate stores.
+expand_cars:
+    lda #$56
+    sta $FFDF
+    lda #$45
+    sta expand_bank
+@bank:
+    sec
+    sbc #$45
+    tax
+    lda expand_lo,x
+    sta src
+    lda expand_hi,x
+    sta src+1
+    lda #0
+    sta dst
+    lda #$20
+    sta dst+1
+@token:
+    jsr expand_read
+    beq @done
+    bmi @match
+    sta count
+@literal:
+    jsr expand_read
+    jsr expand_write
+    dec count
+    bne @literal
+    beq @token
+@match:
+    and #127
+    clc
+    adc #3
+    sta count
+    jsr expand_read
+    sta tmp
+    jsr expand_read
+    sta height
+    sec
+    lda dst
+    sbc tmp
+    sta str
+    lda dst+1
+    sbc height
+    sta str+1
+    lda expand_bank
+    sta $FFEF
+@copy:
+    ldy #0
+    lda (str),y
+    jsr expand_write
+    inc str
+    bne :+
+    inc str+1
+:
+    dec count
+    bne @copy
+    jmp @token
+@done:
+    inc expand_bank
+    lda expand_bank
+    cmp #$47
+    bne @bank
+    lda #$40
+    sta $FFEF
+    lda #$76
+    sta $FFDF
+    rts
+expand_read:
+    lda #$42
+    sta $FFEF
+    ldy #0
+    lda (src),y
+    inc src
+    bne :+
+    inc src+1
+:
+    cmp #0
+    rts
+expand_write:
+    ldx expand_bank
+    stx $FFEF
+    ldy #0
+    sta (dst),y
+    inc dst
+    bne :+
+    inc dst+1
+:
     rts
 irq:
     pha
@@ -275,7 +375,6 @@ copy:
 :
     rts
 _scene_init:
-    jsr sprite_reset
     lda #$40
     sta $FFEF
     lda #0
@@ -364,13 +463,15 @@ _scene_init:
     sta previous+528,x
     inx
     bne @previous
-    rts
+    jmp sprite_reset
 _road_load:
     inc revision
     ldx _hill
     lda hill_lo,x
+    sta str
     sta hill_read+1
     lda hill_hi,x
+    sta str+1
     sta hill_read+2
     ldx _road_pose
     lda road_lo,x
@@ -411,10 +512,32 @@ road_store:
 :
     dec height
     bne road_field
+    ; The same hill mapping selects precomputed horizontal footprints.
+    ldx _road_pose
+    lda mark_lo,x
+    sta src
+    lda mark_hi,x
+    sta src+1
+    lda #$45
+    sta $FFEF
+    ldx #55
+@marks:
+    txa
+    tay
+    lda (str),y
+    tay
+    lda (src),y
+    sta road_marks,x
+    dex
+    bpl @marks
     lda #$40
     sta $FFEF
     rts
 _road_prepare:
+    lda #<previous_marks
+    sta count
+    lda #>previous_marks
+    sta count+1
     lda #<previous
     sta old
     lda #>previous
@@ -428,6 +551,12 @@ _road_prepare:
     lda old+1
     adc #>392
     sta old+1
+    clc
+    lda count
+    adc #56
+    sta count
+    bcc :+
+    inc count+1
 :
     ldx #0
     lda _page
@@ -549,6 +678,44 @@ _road_prepare:
     sta (str),y
     lda tmp
     sta _road_damage,x
+    beq @mask_ready
+    cmp #3
+    beq @all_columns
+    lda road_marks,x
+    ldy tmp
+    cpy #2
+    bne @mask_ready
+    txa
+    tay
+    lda (count),y
+    ora road_marks,x
+    sta fill
+    lda (old),y
+    tay
+    lda column_left,y
+    ldy _geom,x
+    eor column_left,y
+    ora fill
+    sta fill
+    txa
+    clc
+    adc #56
+    tay
+    lda (old),y
+    tay
+    lda column_left,y
+    ldy _geom+56,x
+    eor column_left,y
+    ora fill
+    jmp @mask_ready
+@all_columns:
+    lda #255
+@mask_ready:
+    sta damage_columns,x
+    txa
+    tay
+    lda road_marks,x
+    sta (count),y
     inx
     cpx #56
     beq :+
@@ -870,9 +1037,20 @@ erase_pixel:
 :
     sta (attr),y
     rts
-; Carrying damage forward in painter order also redraws unchanged foreground
-; objects touched by an earlier object. Row granularity is conservative in X.
-object_bands:
+; Eight five-column regions keep horizontal damage cheap on a 6502. Road
+; stripes touch just their regions; sprites propagate damage in painter order.
+object_bounds:
+    ldy _object_x
+    lda column_left,y
+    sta object_mask
+    tya
+    clc
+    adc _object_w
+    tay
+    dey
+    lda column_right,y
+    and object_mask
+    sta object_mask
     lda _object_y
     sec
     sbc #64
@@ -887,31 +1065,128 @@ object_bands:
     tay
     rts
 _object_damaged:
-    jsr object_bands
-@band:
-    lda _road_damage,y
-    bne @yes
-    sty tmp
-    cpx tmp
-    beq @no
-    dey
-    bpl @band
-@no:
-    lda #0
-    tax
-    rts
-@yes:
+    lda _object_full
+    beq @partial
+    lda flags_full
+    bne @full_ready
+    lda #1
+    sta flags_full
+    ldx #24
+@full_flags:
+    sta $0700,x
+    dex
+    bpl @full_flags
+@full_ready:
     lda #1
     ldx #0
     rts
+@partial:
+    lda #0
+    sta flags_full
+    jsr object_bounds
+    stx band
+    lda _object_y
+    and #1
+    sta row
+    lda _object_h
+    sta height
+    lda #0
+    sta object_any
+    ldx #0
+@pair:
+    ldy band
+    lda damage_columns,y
+    sta tmp
+    lda row
+    beq @test
+    lda height
+    cmp #2
+    bcc @test
+    lda damage_columns+1,y
+    ora tmp
+    sta tmp
+@test:
+    lda tmp
+    and object_mask
+    beq @flag
+@hit:
+    lda #1
+    sta object_any
+@flag:
+    sta $0700,x
+    inx
+    inc band
+    dec height
+    beq @done
+    dec height
+    bne @pair
+@done:
+    lda object_any
+    ldx #0
+    rts
 _object_damage:
-    jsr object_bands
+    lda _object_full
+    bne damage_whole
+    jsr object_bounds
+    stx band
+    lda _object_y
+    and #1
+    sta row
+    lda _object_h
+    sta height
+    ldx #0
+@pair:
+    lda $0700,x
+    beq @next
+    ldy band
+    lda damage_columns,y
+    ora object_mask
+    sta damage_columns,y
+    lda row
+    beq @next
+    lda height
+    cmp #2
+    bcc @next
+    lda damage_columns+1,y
+    ora object_mask
+    sta damage_columns+1,y
+@next:
+    inx
+    inc band
+    dec height
+    beq @done
+    dec height
+    bne @pair
+@done:
+    rts
+damage_whole:
+    jsr object_bounds
+@band:
+    lda damage_columns,y
+    ora object_mask
+    sta damage_columns,y
+    sty tmp
+    cpx tmp
+    beq @done
+    dey
+    bpl @band
+@done:
+    rts
+erase_damage:
+    jsr damage_whole
+    jsr object_bounds
 @band:
     lda _road_damage,y
     cmp #2
     bcs :+
-    lda #4                  ; erased pixels need edges as well as stripes
+    lda road_marks,y
+    and object_mask
+    beq :+
+    lda #4                  ; only erasure touching decorations needs repair
     sta _road_damage,y
+    lda damage_columns,y
+    ora road_marks,y
+    sta damage_columns,y
 :
     sty tmp
     cpx tmp
@@ -921,7 +1196,7 @@ _object_damage:
 @done:
     rts
 _object_erase:
-    jsr _object_damage
+    jsr erase_damage
     ldx _object_w
     lda erase_attr_lo,x
     sta src
@@ -1004,8 +1279,8 @@ erase_attr_0:
 erase_pixel_0:
     rts
 _object_draw:
-    ; Set up row pointers in the private extended-address zero page. Generated
-    ; sprite code consists of immediate pixel values and unrolled stores.
+    ; Car tables stay in their own private zero pages. Scenery borrows $18.
+    ; Generated code uses immediate colors and skips untouched pairs of rows.
     ldx _object_id
     lda asset_w,x
     sta _object_w
@@ -1019,10 +1294,19 @@ _object_draw:
     lda _object_y
     sta row
     ldx _object_slot
-    lda pointer_lo,x
-    sta pointer_cache
-    lda pointer_hi,x
+    lda pointer_pages,x
+    sta pointer_page
     sta pointer_cache+1
+    lda #0
+    sta pointer_cache
+    lda _object_id
+    cmp #64
+    bcc @car_cache
+    ; Scenery and gates borrow page $18; invalidate its resident traffic car.
+    lda #255
+    sta pointer_x
+    jmp @build
+@car_cache:
     lda _object_x
     cmp pointer_x,x
     bne @build
@@ -1031,25 +1315,7 @@ _object_draw:
     bne @build
     lda pointer_h,x
     cmp height
-    bcc @build
-    cpx pointer_slot
-    bne @copy_cache
-    lda pointer_rows
-    cmp height
     bcs @draw
-    ; A cached table already contains this page's exact native addresses.
-    ; Four bytes per row: pixel pointer, attribute pointer.
-@copy_cache:
-    ldy #0
-@cached:
-    .repeat 4
-    lda (pointer_cache),y
-    sta $1800,y
-    iny
-    .endrepeat
-    dec height
-    bne @cached
-    beq @ready
 @build:
     lda _object_x
     sta pointer_x,x
@@ -1061,50 +1327,34 @@ _object_draw:
     clc
 @pointers:
     ldx row
-    ; Row starts plus a valid column never cross a 256-byte boundary.
+    ; Native row starts plus a valid column never cross a 256-byte boundary.
     lda row_lo,x
     adc _object_x
-    sta $1800,y
     sta (pointer_cache),y
     iny
     lda row_hi,x
     ora _page
-    sta $1800,y
     sta (pointer_cache),y
     iny
     lda row_lo,x
     adc _object_x
-    sta $1800,y
     sta (pointer_cache),y
     iny
     lda row_hi,x
     ora _page
     adc #$20
-    sta $1800,y
     sta (pointer_cache),y
     iny
     inc row
     dec height
     bne @pointers
-@ready:
-    lda _object_slot
-    sta pointer_slot
-    lda _object_h
-    sta pointer_rows
 @draw:
     ldx _object_id
     lda asset_bank,x
     ora #$40
     sta $FFEF
-    lda #$18
+    lda pointer_page
     sta $FFD0
-    txa
-    lsr a
-    lsr a
-    lsr a
-    lsr a
-    and #3
-    tax
     jsr blit_jump
     lda #0
     sta $FFD0
@@ -1216,22 +1466,23 @@ _say_ready:
     lda _pcm_remaining
     ora _pcm_remaining+1
     bne @wait
-    ; PCM shares disposable scratch with page-two address tables.
+    ; PCM overwrites the sister-byte tags; restore them before any drawing.
     jmp sprite_reset
 sprite_reset:
     lda #255
-    sta pointer_slot
     ldx #17
 :
     sta pointer_x,x
     dex
     bpl :-
-    ; These extended-address tags are invariant across every sprite/page.
-    ; Only speech can overwrite them; skylines use the first 80 cache bytes.
+    ; Tags select bank-zero graphics from any of the eight private zero
+    ; pages. Speech and skyline loading reuse this scratch, then reset it.
     ldx #0
     lda #$8F
 :
-    sta $1400,x
+    .repeat 8, p
+    sta $1000+p*$100,x
+    .endrepeat
     inx
     bne :-
     rts
@@ -1241,8 +1492,7 @@ sky_lo: .byte <$2000,<$2C80,<$3900,<$4580
 sky_hi: .byte >$2000,>$2C80,>$3900,>$4580
 
 ; Slots 0..2 cars, 3..4 tall scenery, 5..6 signs, 7 player, 8 gate.
-pointer_lo: .byte <(cache_first+0),<(cache_first+136),<(cache_first+272),<(cache_first+408),<(cache_first+608),<(cache_first+808),<(cache_first+944),<(cache_first+1080),<(cache_first+1216),<(cache+0),<(cache+136),<(cache+272),<(cache+408),<(cache+608),<(cache+808),<(cache+944),<(cache+1080),<(cache+1216)
-pointer_hi: .byte >(cache_first+0),>(cache_first+136),>(cache_first+272),>(cache_first+408),>(cache_first+608),>(cache_first+808),>(cache_first+944),>(cache_first+1080),>(cache_first+1216),>(cache+0),>(cache+136),>(cache+272),>(cache+408),>(cache+608),>(cache+808),>(cache+944),>(cache+1080),>(cache+1216)
+pointer_pages: .byte $18,$19,$1A,$18,$18,$18,$18,$1B,$18,$1C,$1D,$1E,$18,$18,$18,$18,$1F,$18
 erase_attr_lo: .byte <erase_attr_0,<erase_attr_1,<erase_attr_2,<erase_attr_3,<erase_attr_4,<erase_attr_5,<erase_attr_6,<erase_attr_7,<erase_attr_8,<erase_attr_9,<erase_attr_10,<erase_attr_11,<erase_attr_12,<erase_attr_13,<erase_attr_14,<erase_attr_15,<erase_attr_16,<erase_attr_17,<erase_attr_18,<erase_attr_19,<erase_attr_20,<erase_attr_21,<erase_attr_22,<erase_attr_23,<erase_attr_24,<erase_attr_25,<erase_attr_26,<erase_attr_27,<erase_attr_28,<erase_attr_29,<erase_attr_30
 erase_attr_hi: .byte >erase_attr_0,>erase_attr_1,>erase_attr_2,>erase_attr_3,>erase_attr_4,>erase_attr_5,>erase_attr_6,>erase_attr_7,>erase_attr_8,>erase_attr_9,>erase_attr_10,>erase_attr_11,>erase_attr_12,>erase_attr_13,>erase_attr_14,>erase_attr_15,>erase_attr_16,>erase_attr_17,>erase_attr_18,>erase_attr_19,>erase_attr_20,>erase_attr_21,>erase_attr_22,>erase_attr_23,>erase_attr_24,>erase_attr_25,>erase_attr_26,>erase_attr_27,>erase_attr_28,>erase_attr_29,>erase_attr_30
 erase_pixel_lo: .byte <erase_pixel_0,<erase_pixel_1,<erase_pixel_2,<erase_pixel_3,<erase_pixel_4,<erase_pixel_5,<erase_pixel_6,<erase_pixel_7,<erase_pixel_8,<erase_pixel_9,<erase_pixel_10,<erase_pixel_11,<erase_pixel_12,<erase_pixel_13,<erase_pixel_14,<erase_pixel_15,<erase_pixel_16,<erase_pixel_17,<erase_pixel_18,<erase_pixel_19,<erase_pixel_20,<erase_pixel_21,<erase_pixel_22,<erase_pixel_23,<erase_pixel_24,<erase_pixel_25,<erase_pixel_26,<erase_pixel_27,<erase_pixel_28,<erase_pixel_29,<erase_pixel_30
