@@ -1,0 +1,1 @@
+-- Use the Apple III's ordinary cursor and letter keys for this turn-based game.

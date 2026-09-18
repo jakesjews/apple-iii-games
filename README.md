@@ -9,6 +9,7 @@ timing, sound and booting; individual games live under `games/`.
 | Star Siege /// | Space Invaders-style shooter | `make run GAME=invaders` |
 | Blockfall /// | Tetris-style falling blocks | `make run GAME=tetris` |
 | Brick Bash /// | Breakout-style paddle game | `make run GAME=breakout` |
+| Merge 2048 /// | Sliding-number puzzle | `make run GAME=2048` |
 
 The games use native 280×192 color graphics, original artwork and font, speaker
 effects, pause, mute and restart. They require at least 128 KB of RAM and the
@@ -47,6 +48,16 @@ best score retained until reset.
 ![Brick Bash running in MAME](docs/images/brick-bash.png)
 
 [Brick Bash controls and rules](games/breakout/README.md)
+
+## Merge 2048 ///
+
+Slide a four-by-four grid and merge equal numbers to reach 2048. Includes colored
+tiles, score and best score, one-move undo, pause, and continued play after the
+winning tile. Use arrows or WASD, U to undo and N for a new board.
+
+![Merge 2048 running in MAME](docs/images/merge-2048.png)
+
+[Merge 2048 controls and rules](games/2048/README.md)
 
 ## Build and play
 
@@ -117,6 +128,7 @@ the keyboard's repeat; Shift provides an independently readable hard-drop edge.
 | Star Siege | `build/invaders/invaders.po` | `build/invaders/invaders.dsk` |
 | Blockfall | `build/tetris/tetris.po` | `build/tetris/tetris.dsk` |
 | Brick Bash | `build/breakout/breakout.po` | `build/breakout/breakout.dsk` |
+| Merge 2048 | `build/2048/2048.po` | `build/2048/2048.dsk` |
 
 Mount either image in the Apple III's **internal / first floppy drive**, then
 reset or power on. Preserve the extension because it identifies the sector order.
@@ -151,6 +163,9 @@ screenshots under `build/<game>/test/`. Failures return a nonzero exit status.
   every `.dsk` image with 128 KB of RAM.
 - Brick Bash checks cover an input-only rally, wall and paddle rebounds, brick
   scoring, armor, life loss, retries, stage progression, pause and mute.
+- Merge 2048 checks cover directional compaction, single merges, spawning,
+  unchanged moves, undo and random-state restoration, win/continue, large values
+  and full-board game over.
 
 The first gameplay tests use only emulated key presses. Later tests arrange rare
 collision and end-of-wave situations in RAM, then let the game's actual code
