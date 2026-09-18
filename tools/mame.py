@@ -62,9 +62,11 @@ def main() -> None:
     suites = [(script, "")]
     if args.game in ("invaders", "tetris", "breakout"):
         suites.append((ROOT / "tests/joystick.lua", "joystick-"))
+    if args.game == "highway":
+        suites.append((ROOT / "tests/highway_race.lua", "race-"))
     env["A3_TEST_GAME"] = args.game
     for suite, prefix in suites:
-        for extension, ram, smoke in (("po", "256K", False), ("dsk", "128K", True)):
+        for extension, ram, smoke in (("po", "256K", False), ("dsk", "256K" if args.game == "highway" else "128K", True)):
             out = ROOT / "build" / args.game / "test" / (prefix + extension + "-" + ram)
             out.mkdir(parents=True, exist_ok=True)
             result = out / "result.txt"
@@ -78,6 +80,17 @@ def main() -> None:
             if not result.exists() or not result.read_text().startswith("PASS "):
                 raise SystemExit(result.read_text() if result.exists() else "MAME exited without a passing test result")
             print(result.read_text().strip())
+    if args.game == "highway":
+        out = ROOT / "build/highway/test/128K"
+        out.mkdir(parents=True, exist_ok=True)
+        result = out / "result.txt"
+        result.unlink(missing_ok=True)
+        env["A3_TEST_OUTPUT"] = str(out)
+        subprocess.run(command(args.game, headless, ROOT / "tests/highway_128.lua") + ["-ramsize", "128K"],
+                       cwd=ROOT, env=env, check=True, timeout=180)
+        if not result.exists() or not result.read_text().startswith("PASS "):
+            raise SystemExit(result.read_text() if result.exists() else "Missing 128K rejection result")
+        print(result.read_text().strip())
 
 
 if __name__ == "__main__":

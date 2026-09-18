@@ -11,16 +11,19 @@ timing, sound, native joystick input and booting; individual games live under `g
 | Brick Bash /// | Breakout-style paddle game | `make run GAME=breakout` |
 | Merge 2048 /// | Sliding-number puzzle | `make run GAME=2048` |
 | Word Five /// | Wordle-style word puzzle | `make run GAME=wordle` |
+| Highway /// | Pseudo-3D road racer, 256 KB | `make run GAME=highway` |
 
-The games use native 280×192 color graphics, original artwork and font, speaker
-effects and restart. Arcade games and 2048 support pause; Word Five waits for your
-input. Each game supports muting. They require at least 128 KB of RAM and the
+The games use native 280×192 color graphics, original artwork and font, sound
+effects and restart. Highway uses the native DAC for speech and engine audio.
+Arcade games and 2048 support pause; Word Five waits for your input. Each game
+supports muting. The first five games require 128 KB; Highway requires 256 KB.
+All use the
 original Apple III boot ROM. No SOS disk, Apple II emulation, expansion card or
 downloaded game assets are needed.
 
 ## Play on MiSTer
 
-Download [Apple-III-Games.zip](releases/Apple-III-Games.zip?raw=1) for all five games,
+Download [Apple-III-Games.zip](releases/Apple-III-Games.zip?raw=1) for all six games,
 or copy the ready-made [game folder](releases/games/Apple-III/Apple-III-Games/).
 Merge the ZIP's `games` folder into `/media/fat/`, open the installed Apple III
 core's **Mount Drive 1** menu, choose a disk from **Apple-III-Games**, and press
@@ -87,6 +90,17 @@ and Tab toggles sound. Every puzzle runs offline.
 ![Word Five running in MAME](docs/images/word-five.png)
 
 [Word Five controls, rules and dictionary credits](games/wordle/README.md)
+
+## Highway ///
+
+A three-stage road race through sunset coast, a tunnel, desert bends and a
+city at night. Dodge growing traffic, watch the hills and road edges, brake
+before a collision, and beat the checkpoint clock. Includes native joystick
+controls, a spoken countdown, DAC engine audio and a best score.
+
+![Highway running in MAME](docs/images/highway.png)
+
+[Highway controls, engine details and validation](games/highway/README.md)
 
 ## Build and play
 

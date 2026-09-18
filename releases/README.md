@@ -1,6 +1,6 @@
 # Apple III Games for MiSTer
 
-Five ready-to-play boot disks for an already installed
+Six ready-to-play boot disks for an already installed
 [Apple-III-MiSTer core](https://github.com/jakesjews/Apple-III-MiSTer).
 
 ## Copy and play
@@ -13,7 +13,7 @@ Five ready-to-play boot disks for an already installed
    a Mac keyboard) or the **OSD button**. Choose **Mount Drive 1**, open
    **Apple-III-Games**, and select a game's `.dsk` file.
 3. Close the menu and press **Ctrl + F12** for a hardware reset. The game boots
-   directly. Press **Space** or **Return** at its title to start. The three
+   directly. Press **Space** or **Return** at its title to start. The four
    arcade games also start with **joystick button 1**.
 
 To switch games, mount another disk in **Drive 1** and press **Ctrl + F12**.
@@ -29,6 +29,7 @@ After copying, the disks are here:
     Brick Bash.dsk
     Merge 2048.dsk
     Word Five.dsk
+    Highway III.dsk
     README.md
     WORDLIST-LICENSE.txt
 ```
@@ -40,6 +41,7 @@ After copying, the disks are here:
 | Brick Bash.dsk | Breakout-style paddle game with sixty bricks and advancing stages |
 | Merge 2048.dsk | Sliding-number puzzle with undo and play beyond 2048 |
 | Word Five.dsk | Five-letter word puzzle with 405 numbered answers and six guesses |
+| Highway III.dsk | Three-stage road racer with traffic, hills and a tunnel; **256 KB required** |
 
 ## Joystick controls on MiSTer
 
@@ -52,6 +54,7 @@ a center dead zone, and keyboard controls remain available.
 | Star Siege | Left/right moves | Hold to fire; press to start/retry | Pause/resume |
 | Blockfall | Left/right moves; down soft drops; up hard drops | Rotate clockwise; press to start/retry | Pause/resume |
 | Brick Bash | Left/right moves | Serve; press to start/retry | Pause/resume |
+| Highway III | Left/right steers; down brakes | Hold to accelerate; press to start/retry | Pause/resume |
 
 Blockfall requires a new up press for each hard drop and a new button press for
 each rotation. Its keyboard **Z** and **C** still rotate counterclockwise and
@@ -62,7 +65,7 @@ press toggles pause; there is no need to hold it or reset the switch before play
 
 ## Keyboard controls on MiSTer
 
-For the three arcade games, hold **Windows/Command** to move left and **Alt** to
+For the four arcade games, hold **Windows/Command** to move left and **Alt** to
 move right. These are the core's Open Apple and Solid Apple keys. Use these
 modifier keys for continuous movement; a held arrow key also activates Solid
 Apple in this core.
@@ -72,11 +75,12 @@ Apple in this core.
 | Star Siege | Windows/Command and Alt move; hold Shift to fire. Space also fires. |
 | Blockfall | Windows/Command and Alt move; X/Z rotate; hold Ctrl to soft drop; Shift or Space hard drops; C holds/swaps. |
 | Brick Bash | Windows/Command and Alt move; Space, Return or Shift serves the ball. |
+| Highway III | Windows/Command and Alt steer; hold Shift to accelerate; hold Ctrl to brake. |
 | Merge 2048 | Arrows or WASD slide; U undoes; N starts a new board; Return continues after reaching 2048. |
 | Word Five | Type letters; Return submits; Left Arrow deletes; Tab toggles sound. |
 
 **Space/Return** starts or retries. **Escape** returns to the title. In Star
-Siege, Blockfall, Brick Bash and Merge 2048, **P** pauses and **M** toggles sound.
+Siege, Blockfall, Brick Bash, Highway III and Merge 2048, **P** pauses and **M** toggles sound.
 In Word Five, type a puzzle number **1–405** at the title and press **Return**;
 **Space** chooses a random puzzle. After a round, **Return** starts the next
 puzzle. Letter keys always enter letters while guessing.
@@ -88,10 +92,12 @@ their disks.
 
 Each `.dsk` is a 140 KiB native Apple III boot disk in **DOS sector order**. Keep
 the `.dsk` extension. Each game runs directly from Drive 1 without an SOS disk.
-The images require at least 128 KiB of RAM and the original Apple III boot ROM,
-as supplied by the installed core's normal configuration.
+Highway III requires 256 KiB RAM; the other five require 128 KiB. All use the
+original Apple III boot ROM supplied by the installed core's normal configuration.
 
-The packaged disks have been booted and exercised in MAME with 128 KiB RAM.
+The first five disks have been booted and exercised in MAME with 128 KiB RAM.
+Highway III is tested with 256 KiB, including a complete controller-driven tour,
+and shows a clear requirement message on a 128 KiB machine.
 The joystick reader was also tested on the core's CPU, VIA and ADC simulation
 at all 256 positions, with video on/off and both CPU speeds.
 Physical MiSTer validation remains to be done.

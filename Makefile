@@ -32,7 +32,7 @@ build/$(1)/$(1).bin: build/$(1)/main.o build/$(1)/assets.o build/platform/startu
 build/$(1)/$(1).po: build/$(1)/$(1).bin platform/apple3/boot.s platform/apple3/boot.cfg tools/disk.py
 	$$(PYTHON) tools/disk.py $$< --ca65 $$(CA65) --ld65 $$(LD65)
 endef
-$(foreach game,$(GAMES),$(eval $(call GAME_RULES,$(game))))
+$(foreach game,$(filter-out highway,$(GAMES)),$(eval $(call GAME_RULES,$(game))))
 
 build/wordle/dictionary.h: games/wordle/words.txt games/wordle/answers.txt games/wordle/WORDLIST-LICENSE.txt tools/wordlist.py
 	$(PYTHON) tools/wordlist.py games/wordle/words.txt games/wordle/answers.txt $@
@@ -54,3 +54,19 @@ clean:
 	$(PYTHON) -c "import shutil; from pathlib import Path; [shutil.rmtree(p) for p in Path('build').glob('*') if p.is_dir() and p.name != 'local-roms']"
 
 .SECONDARY:
+
+# Highway keeps code in the system bank and banks its much larger asset set.
+build/highway/tables.s: tools/highway_assets.py games/highway/ready.pcm platform/apple3/font.json
+	$(PYTHON) tools/highway_assets.py
+build/highway/tables.o: build/highway/tables.s
+	$(CA65) -g -o $@ $<
+build/highway/engine.o: games/highway/engine.s
+	@mkdir -p $(@D)
+	$(CA65) -g -o $@ $<
+build/highway/main.o: games/highway/main.c games/highway/engine.h platform/apple3/apple3.h build/highway/tables.s
+	@mkdir -p $(@D)
+	$(CL65) -t none --cpu 6502 -Oirs -g -I platform/apple3 -I games/highway -I build/highway -c -o $@ $<
+build/highway/code.bin: build/highway/main.o build/highway/engine.o build/highway/tables.o build/platform/joystick.o games/highway/game.cfg
+	$(CL65) -t none -C games/highway/game.cfg -m build/highway/highway.map -Ln build/highway/highway.lbl -Wl --dbgfile,build/highway/highway.dbg -o $@ $(filter %.o,$^)
+build/highway/highway.po: build/highway/code.bin build/highway/tables.s games/highway/boot.s tools/highway_disk.py tools/disk.py
+	$(PYTHON) tools/highway_disk.py --ca65 $(CA65) --ld65 $(LD65)

@@ -15,6 +15,7 @@ GAMES = {
     "breakout": "Brick Bash.dsk",
     "2048": "Merge 2048.dsk",
     "wordle": "Word Five.dsk",
+    "highway": "Highway III.dsk",
 }
 
 
