@@ -30,6 +30,11 @@ build/$(1)/$(1).po: build/$(1)/$(1).bin platform/apple3/boot.s platform/apple3/b
 endef
 $(foreach game,$(GAMES),$(eval $(call GAME_RULES,$(game))))
 
+build/wordle/dictionary.h: games/wordle/words.txt games/wordle/answers.txt games/wordle/WORDLIST-LICENSE.txt tools/wordlist.py
+	$(PYTHON) tools/wordlist.py games/wordle/words.txt games/wordle/answers.txt $@
+
+build/wordle/main.o: build/wordle/dictionary.h
+
 run: build/$(GAME)/$(GAME).po
 	$(PYTHON) tools/mame.py run $(GAME)
 

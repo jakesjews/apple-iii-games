@@ -8,7 +8,7 @@
 #define MODIFIERS HW(0xC008)
 
 /* Native 280x192 color graphics. Sprites are 14x8, XOR drawn, x <= 255.
- * Text x is a character column (0..39); other operations use pixel x.
+ * Text and tile x are columns (0..39); sprites and pixels use pixel x.
  * Color is an Apple III foreground nibble with a black background. */
 extern uint8_t gfx_x, gfx_y, gfx_color;
 /* Optional fixed-color lower band, useful for classic arcade screen overlays.

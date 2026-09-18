@@ -34,8 +34,10 @@ return function(game, controls)
         M={'X3',64}, N={'X3',32}, O={'X1',512}, P={'X5',256}, Q={'X1',2}, R={'X1',16},
         S={'X2',2}, T={'X1',32}, U={'X1',128}, V={'X3',8}, W={'X1',4}, X={'X3',2},
         Y={'X1',64}, Z={'X3',1}, SPACE={'X7',8}, ENTER={'X6',64}, ESC={'X0',1},
-        BACK={'X6',256}, LEFT={'X7',256}, RIGHT={'X7',64}, UP={'X6',128}, DOWN={'X7',128}
+        BACK={'X6',256}, LEFT={'X7',256}, RIGHT={'X7',64}, UP={'X6',128}, DOWN={'X7',128},
+        TAB={'X1',1}, ['0']={'X4',256}
     }
+    for n=1,9 do map[tostring(n)] = {'X0',1<<n} end
     function t.key(name)
         local entry = assert(map[name], name)
         return t.field(entry[1], entry[2])

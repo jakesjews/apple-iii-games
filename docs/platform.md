@@ -127,13 +127,21 @@ Space/Shift press and release, movement, hold, rotation, pause and sound. Its bo
 fixtures cover every piece and rotation, kicks and blocked rotation, grounded
 lock delay, all four line-clear counts and row compaction, bag order, level
 progression and both spawn/hidden-row top-out. Tests verify that gameplay has not
-overwritten the loaded program. `make test-all` runs both games and the shared
+overwritten the loaded program. `make test-all` runs every game and the shared
 disk checks; each game boots with both disk orders and with 128 KB and 256 KB RAM.
 
 New game suites use `tests/mame.lua` for symbol lookup, keyboard input, snapshots,
 VBL-safe fixtures, speaker observation and fail-closed result reporting. Brick
 Bash checks real rallies before arranging precise paddle, wall and brick
 contacts. Its ball advances in single-pixel collision substeps at every speed.
+Merge 2048 checks include single-merge rules, deterministic undo, large tile
+values and clear gutters around rendered numbers. Word Five tests operate through
+keyboard input throughout and select known answers using numbered puzzles.
+
+Word Five stores its compressed dictionary and answer references in the program's
+read-only segment. `tools/wordlist.py` builds the header from vendored text inputs;
+host tests independently round-trip the complete lexicon and check every puzzle
+ID. The game remains within the same 16 KB payload limit as the arcade games.
 
 MAME validation is distinct from physical or FPGA validation. The generated disks
 are ready for a hardware smoke test, but no hardware result is claimed here.
@@ -153,5 +161,6 @@ Hardware and emulator references used during implementation:
   convention.
 
 The artwork, font, boot block, game and platform sources in this repository were
-created for this collection. The references informed the implementation; their
-ROMs and source files are not bundled.
+created for this collection. The hardware references informed the implementation;
+their ROMs and source files are not bundled. Word Five includes a derived ESDB
+word list with its [source attribution and license](../games/wordle/README.md).

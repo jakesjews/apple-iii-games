@@ -10,9 +10,11 @@ timing, sound and booting; individual games live under `games/`.
 | Blockfall /// | Tetris-style falling blocks | `make run GAME=tetris` |
 | Brick Bash /// | Breakout-style paddle game | `make run GAME=breakout` |
 | Merge 2048 /// | Sliding-number puzzle | `make run GAME=2048` |
+| Word Five /// | Wordle-style word puzzle | `make run GAME=wordle` |
 
 The games use native 280×192 color graphics, original artwork and font, speaker
-effects, pause, mute and restart. They require at least 128 KB of RAM and the
+effects and restart. Arcade games and 2048 support pause; Word Five waits for your
+input. Each game supports muting. They require at least 128 KB of RAM and the
 original Apple III boot ROM. No SOS disk, Apple II emulation, expansion card or
 downloaded game assets are needed.
 
@@ -58,6 +60,18 @@ winning tile. Use arrows or WASD, U to undo and N for a new board.
 ![Merge 2048 running in MAME](docs/images/merge-2048.png)
 
 [Merge 2048 controls and rules](games/2048/README.md)
+
+## Word Five ///
+
+Find a five-letter word in six guesses. Green means the right letter in the right
+place; yellow means it belongs elsewhere. Includes a colored keyboard, careful
+duplicate-letter scoring, 4,482 accepted guesses, 405 curated answers, selectable
+puzzle numbers and session win/streak statistics. Enter submits, Backspace edits,
+and Tab toggles sound. Every puzzle runs offline.
+
+![Word Five running in MAME](docs/images/word-five.png)
+
+[Word Five controls, rules and dictionary credits](games/wordle/README.md)
 
 ## Build and play
 
@@ -129,11 +143,14 @@ the keyboard's repeat; Shift provides an independently readable hard-drop edge.
 | Blockfall | `build/tetris/tetris.po` | `build/tetris/tetris.dsk` |
 | Brick Bash | `build/breakout/breakout.po` | `build/breakout/breakout.dsk` |
 | Merge 2048 | `build/2048/2048.po` | `build/2048/2048.dsk` |
+| Word Five | `build/wordle/wordle.po` | `build/wordle/wordle.dsk` |
 
 Mount either image in the Apple III's **internal / first floppy drive**, then
 reset or power on. Preserve the extension because it identifies the sector order.
 These are standalone boot disks, **not SOS or ProDOS filesystems**. The game makes
 no disk writes; high scores are held in RAM only.
+Word Five's generated directory also includes `WORDLIST-LICENSE.txt`; include it
+when redistributing its disks.
 
 For the Apple-III-MiSTer core, copy the `.dsk` into its game directory, mount it in
 the internal drive and reset. This release was tested in MAME; physical Apple III
@@ -152,6 +169,8 @@ The tests cold-boot the actual disk in MAME, run the assembled 6502 game and sav
 screenshots under `build/<game>/test/`. Failures return a nonzero exit status.
 
 - Three Python checks cover disk geometry, ROM block ordering and boot payloads.
+- Three dictionary checks round-trip every accepted word, validate every packed
+  answer and puzzle ID, and reject malformed source data.
 - Thirty Star Siege emulator checks cover native mode, controls, bounds, shooting
   and scoring, speaker accesses, pause, mute, shield damage, mystery-ship scoring,
   extra lives, respawn protection, game over, restart and wave progression.
@@ -166,6 +185,9 @@ screenshots under `build/<game>/test/`. Failures return a nonzero exit status.
 - Merge 2048 checks cover directional compaction, single merges, spawning,
   unchanged moves, undo and random-state restoration, win/continue, large values
   and full-board game over.
+- Word Five's emulator suite uses keyboard input throughout: editing, word
+  validation, repeated letters, keyboard colors, wins, losses, puzzle selection,
+  statistics and mute. All game suites check the loaded program for corruption.
 
 The first gameplay tests use only emulated key presses. Later tests arrange rare
 collision and end-of-wave situations in RAM, then let the game's actual code
