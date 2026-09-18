@@ -2,7 +2,7 @@
 
 Native Apple /// games, built together in one repository. Each game boots directly
 from its own floppy image. Shared 6502 platform code handles graphics, frame
-timing, sound and booting; individual games live under `games/`.
+timing, sound, native joystick input and booting; individual games live under `games/`.
 
 | Game | Style | Play |
 | --- | --- | --- |
@@ -17,6 +17,21 @@ effects and restart. Arcade games and 2048 support pause; Word Five waits for yo
 input. Each game supports muting. They require at least 128 KB of RAM and the
 original Apple III boot ROM. No SOS disk, Apple II emulation, expansion card or
 downloaded game assets are needed.
+
+## Play on MiSTer
+
+Download [Apple-III-Games.zip](releases/Apple-III-Games.zip?raw=1) for all five games,
+or copy the ready-made [game folder](releases/games/Apple-III/Apple-III-Games/).
+Merge the ZIP's `games` folder into `/media/fat/`, open the installed Apple III
+core's **Mount Drive 1** menu, choose a disk from **Apple-III-Games**, and press
+**Ctrl + F12** to boot it.
+
+Star Siege, Blockfall and Brick Bash support controller 1 on **Port B** (the
+core's default). Left/right moves, button 1 fires/rotates/serves, and button 2
+pauses. In Blockfall, down soft drops and up hard drops.
+
+The [release guide](releases/README.md) includes upload instructions and complete
+joystick and keyboard controls. Run `make release` to refresh the packaged builds.
 
 ## Star Siege ///
 
@@ -119,6 +134,11 @@ keys and Shift provide independent, continuous movement and firing. The MAME
 launcher maps modern controls onto those real hardware inputs. Close the MAME
 window to quit the emulator.
 
+Connect a controller before launching MAME to use the native joystick. The
+launcher maps its first two buttons to the same pushbutton and latching-switch
+behavior as MiSTer. Joystick gameplay uses the machine's analog converter and
+button registers; keyboard controls can be used at the same time.
+
 Blockfall controls:
 
 | Action | MAME | Native Apple III keyboard |
@@ -152,9 +172,9 @@ no disk writes; high scores are held in RAM only.
 Word Five's generated directory also includes `WORDLIST-LICENSE.txt`; include it
 when redistributing its disks.
 
-For the Apple-III-MiSTer core, copy the `.dsk` into its game directory, mount it in
-the internal drive and reset. This release was tested in MAME; physical Apple III
-and FPGA hardware validation remains to be done.
+For the Apple-III-MiSTer core, use the ready-to-copy [release package](releases/README.md).
+The disks were tested in MAME; physical Apple III and FPGA hardware validation
+remains to be done.
 
 ## Test
 
@@ -180,6 +200,10 @@ screenshots under `build/<game>/test/`. Failures return a nonzero exit status.
   the seven-piece bag, top-out, pause, sound, restart and program integrity.
 - Each full suite runs the `.po` with 256 KB. Additional boot/control checks run
   every `.dsk` image with 128 KB of RAM.
+- The three arcade games also run joystick suites in both disk formats. They
+  cover the center dead zone, simultaneous movement/actions, press and release
+  behavior, both switch transitions, pause, retry, keyboard coexistence, and a
+  stuck ADC's timeout. Blockfall checks rotation, soft drop and hard-drop edges.
 - Brick Bash checks cover an input-only rally, wall and paddle rebounds, brick
   scoring, armor, life loss, retries, stage progression, pause and mute.
 - Merge 2048 checks cover directional compaction, single merges, spawning,
@@ -197,6 +221,18 @@ Validated with MAME 0.289 and Homebrew cc65 2.19. `MAME`, `CL65`, `CA65`, `LD65`
 and `PYTHON` can override tool paths. `make clean` removes generated game and test
 directories while preserving `build/local-roms/`.
 
+For an additional test against the FPGA implementation, use a source checkout
+of [Apple-III-MiSTer](https://github.com/jakesjews/Apple-III-MiSTer) with its
+`sim/gen_vhdl.sh` netlists already generated, and install Verilator:
+
+```sh
+python3 tools/test_joystick_core.py /path/to/Apple-III-MiSTer
+```
+
+This runs the production joystick reader on the core's CPU, VIA and ADC for all
+256 axis positions at 1 and 2 MHz, with video on and off. Outputs stay under
+`build/joystick-core/`; the core checkout is read without being modified.
+
 ## Add another game
 
 Create `games/<name>/main.c` and `games/<name>/sprites.json`. The top-level Makefile
@@ -209,5 +245,7 @@ make run GAME=<name>
 
 Add `tests/<name>.lua` to enable `make test GAME=<name>` and include the game in
 `make test-all`. An optional `games/<name>/controls.lua` customizes MAME controls.
+Add its disk name to `GAMES` in `tools/release.py` and update the release guide
+before running `make release` to publish the new game in the MiSTer package.
 See [the platform guide](docs/platform.md) for the memory map, graphics API, asset
 format, boot contract and source references.

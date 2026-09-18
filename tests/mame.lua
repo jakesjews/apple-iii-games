@@ -66,13 +66,15 @@ return function(game, controls)
     function t.type(s) for letter in s:gmatch('.') do t.tap(t.key(letter)) end end
     function t.snapshot(name) assert(not screen:snapshot(output .. '/' .. name .. '.png')) end
     function t.pixels() return t.mem:read_range(0x2000, 0x5FFF, 8) end
-    function t.integrity()
+    function t.integrity(mutable_byte)
         local f = assert(io.open('build/' .. game .. '/' .. game .. '.bin', 'rb'))
         local data = f:read('a'); f:close()
         for i = 1, #data do
-            assert(t.mem:read_u8(0x6000+i-1) == data:byte(i), string.format('program corrupted at %04X', 0x6000+i-1))
+            if 0x6000+i-1 ~= mutable_byte then
+                assert(t.mem:read_u8(0x6000+i-1) == data:byte(i), string.format('program corrupted at %04X', 0x6000+i-1))
+            end
         end
-        t.check(true, 'gameplay preserves the entire loaded program')
+        t.check(true, 'gameplay preserves program code and read-only data')
     end
     t.smoke = os.getenv('A3_SMOKE_ONLY') == '1'
     function t.run(suite)

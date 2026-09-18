@@ -246,10 +246,10 @@ static void title_screen(void)
     text(13, 107, 0xF0, "BRUTE   10");
     sprite(UFO, 67, 121, 0x90);
     text(13, 121, 0xF0, "MYSTERY SHIP  100");
-    text(9, 142, 0xD0, "PRESS SPACE TO DEFEND");
+    text(5, 142, 0xD0, "PRESS SPACE OR BUTTON TO DEFEND");
     text(6, 159, 0xF0, "ARROWS / A D MOVE   SPACE FIRE");
     text(5, 171, 0x70, "NATIVE: APPLE KEYS + SHIFT FIRE");
-    text(8, 184, 0x60, "32 INVADERS. ONE APPLE III.");
+    text(4, 184, 0x60, "JOYSTICK MOVE/FIRE  SWITCH PAUSE");
 }
 
 static void moving_objects(void)
@@ -419,6 +419,7 @@ static void update_bombs(void)
 
 static void inputs(void)
 {
+    joystick_poll();
     key = 0;
     modifiers = MODIFIERS;
     if (KEYBOARD & 0x80) {
@@ -440,9 +441,9 @@ static void play_frame(void)
     if (burst_timer) --burst_timer;
     if (cooldown) --cooldown;
     frame_phase = (frame_counter >> 2) & 1;
-    left = !(modifiers & 0x10);
-    right = !(modifiers & 0x20);
-    fire = (modifiers & 2) || key == ' ';
+    left = !(modifiers & 0x10) || (joy & JOY_LEFT);
+    right = !(modifiers & 0x20) || (joy & JOY_RIGHT);
+    fire = (modifiers & 2) || key == ' ' || (joy & JOY_BUTTON);
     /* Unmodified hardware keys also work, using native keyboard repeat. */
     if (key == 'A' || key == 8) { move_key = 1; move_hold = 5; }
     if (key == 'D' || key == 21) { move_key = 2; move_hold = 5; }
@@ -482,17 +483,18 @@ static void play_frame(void)
 void main(void)
 {
     video_init();
+    joystick_init();
     title_screen();
     for (;;) {
         wait_frame();
         ++frame_counter;
         inputs();
         if (state == TITLE) {
-            if (key == ' ' || key == 13 || (modifiers & 2)) new_game();
+            if (key == ' ' || key == 13 || (modifiers & 2) || (joy_pressed & JOY_BUTTON)) new_game();
             continue;
         }
         if (key == 27) { title_screen(); continue; }
-        if (key == 'P' && !control_lock && (state == PLAYING || state == PAUSED)) {
+        if (((key == 'P' && !control_lock) || joy_switch_changed) && (state == PLAYING || state == PAUSED)) {
             control_lock = 20;
             if (state == PLAYING) {
                 state = PAUSED;
@@ -508,7 +510,7 @@ void main(void)
             else { if (wave < 99) ++wave; start_wave(); }
         } else if (state == GAME_OVER) {
             if (transition_timer) --transition_timer;
-            else if (key == ' ' || key == 13 || (modifiers & 2)) new_game();
+            else if (key == ' ' || key == 13 || (modifiers & 2) || (joy_pressed & JOY_BUTTON)) new_game();
         }
     }
 }

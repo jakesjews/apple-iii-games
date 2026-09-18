@@ -80,7 +80,7 @@ static void ready(void)
 {
     state = SERVE; ball_x = paddle_x+12; ball_y = 164;
     dx = 1; dy = -1; x_phase = 0;
-    ui_text(9,135,0xD0,"SPACE TO LAUNCH THE BALL");
+    ui_text(7,135,0xD0,"SPACE OR BUTTON TO LAUNCH");
 }
 
 static void start_wave(void)
@@ -112,10 +112,10 @@ static void title_screen(void)
     ui_title("BRICK BASH",40,30,0x90);
     ui_text(8,64,0xF0,"ONE BALL. SIXTY BRICKS.");
     for (i = 40; i < 60; ++i) { bricks[i] = 1; draw_brick(i); }
-    ui_text(9,115,0xD0,"PRESS SPACE TO START");
+    ui_text(5,115,0xD0,"PRESS SPACE OR BUTTON TO START");
     ui_text(6,139,0xF0,"LEFT/RIGHT OR A/D MOVE PADDLE");
     ui_text(6,153,0xF0,"SPACE LAUNCH  P PAUSE  M SOUND");
-    ui_text(5,174,0x70,"PADDLE EDGES STEER THE REBOUND");
+    ui_text(3,174,0x70,"STICK MOVE  BUTTON SERVE  B2 PAUSE");
 }
 
 static uint8_t brick_at(uint8_t x, uint8_t y)
@@ -202,8 +202,8 @@ static void play_frame(void)
     int8_t movement;
     erase_objects();
     movement = 0;
-    if (!(modifiers & 0x10)) movement -= 4;
-    if (!(modifiers & 0x20)) movement += 4;
+    if (!(modifiers & 0x10) || (joy & JOY_LEFT)) movement -= 4;
+    if (!(modifiers & 0x20) || (joy & JOY_RIGHT)) movement += 4;
     if (!movement) {
         if (key == 'A' || key == 8) movement = -4;
         if (key == 'D' || key == 21) movement = 4;
@@ -213,7 +213,7 @@ static void play_frame(void)
     if (state == SERVE) {
         ball_x = paddle_x+12;
         if (launch || key == 13) {
-            state = PLAYING; ui_text(9,135,0,"                        "); sound(SFX_LASER);
+            state = PLAYING; ui_text(7,135,0,"                        "); sound(SFX_LASER);
         }
     } else for (i = 0; i < speed && state == PLAYING; ++i) step_ball();
     if (hud_dirty) hud();
@@ -223,17 +223,19 @@ static void play_frame(void)
 void main(void)
 {
     uint8_t shift;
-    video_init(); title_screen();
+    video_init(); joystick_init(); title_screen();
     for (;;) {
         wait_frame(); ++frame_counter;
+        joystick_poll();
         key = ui_key(); modifiers = MODIFIERS; shift = (modifiers & 2) != 0;
         launch = (shift && !shift_was_down) || (key == ' ' && !shift && !shift_was_down);
+        launch |= (joy_pressed & JOY_BUTTON) != 0;
         shift_was_down = shift;
         if (action_timer) --action_timer;
         if (key == 'M' && !action_timer) { muted ^= 1; action_timer = 12; }
         if (state == TITLE) { if (launch || key == 13) new_game(); continue; }
         if (key == 27) { title_screen(); continue; }
-        if (key == 'P' && !action_timer && (state == SERVE || state == PLAYING || state == PAUSED)) {
+        if (((key == 'P' && !action_timer) || joy_switch_changed) && (state == SERVE || state == PLAYING || state == PAUSED)) {
             action_timer = 12;
             if (state == PAUSED) { state = previous_state; ui_text(15,151,0,"      "); }
             else { previous_state = state; state = PAUSED; ui_text(15,151,0xD0,"PAUSED"); }

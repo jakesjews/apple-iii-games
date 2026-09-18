@@ -20,7 +20,7 @@ def command(game: str, headless: bool = False, script: Path | None = None, disk:
     roms = os.environ.get("MAME_ROMPATH", str(ROOT / "build/local-roms"))
     args = [mame, "apple3", "-bios", "original", "-rompath", roms,
             "-flop1", str(disk or ROOT / "build" / game / (game + ".po")),
-            "-skip_gameinfo", "-window", "-nomouse", "-noautosave",
+            "-skip_gameinfo", "-window", "-nomouse", "-noautosave", "-adstick_device", "joystick",
             "-noreadconfig", "-autoboot_delay", "0",
             "-snapsize", "1120x768", "-nosnapbilinear"]
     for option, subdir in (("cfg_directory", "cfg"), ("nvram_directory", "nvram"),
@@ -59,20 +59,25 @@ def main() -> None:
         subprocess.run(command(args.game, headless, script), cwd=ROOT, env=env,
                        check=True, timeout=180 if testing else None)
         return
-    for extension, ram, smoke in (("po", "256K", False), ("dsk", "128K", True)):
-        out = ROOT / "build" / args.game / "test" / (extension + "-" + ram)
-        out.mkdir(parents=True, exist_ok=True)
-        result = out / "result.txt"
-        result.unlink(missing_ok=True)
-        env["A3_TEST_OUTPUT"] = str(out)
-        env["A3_SMOKE_ONLY"] = "1" if smoke else "0"
-        disk = ROOT / "build" / args.game / (args.game + "." + extension)
-        print(f"Testing {disk.name}, {ram} RAM", flush=True)
-        subprocess.run(command(args.game, headless, script, disk) + ["-ramsize", ram],
-                       cwd=ROOT, env=env, check=True, timeout=180)
-        if not result.exists() or not result.read_text().startswith("PASS "):
-            raise SystemExit(result.read_text() if result.exists() else "MAME exited without a passing test result")
-        print(result.read_text().strip())
+    suites = [(script, "")]
+    if args.game in ("invaders", "tetris", "breakout"):
+        suites.append((ROOT / "tests/joystick.lua", "joystick-"))
+    env["A3_TEST_GAME"] = args.game
+    for suite, prefix in suites:
+        for extension, ram, smoke in (("po", "256K", False), ("dsk", "128K", True)):
+            out = ROOT / "build" / args.game / "test" / (prefix + extension + "-" + ram)
+            out.mkdir(parents=True, exist_ok=True)
+            result = out / "result.txt"
+            result.unlink(missing_ok=True)
+            env["A3_TEST_OUTPUT"] = str(out)
+            env["A3_SMOKE_ONLY"] = "1" if smoke else "0"
+            disk = ROOT / "build" / args.game / (args.game + "." + extension)
+            print(f"Testing {disk.name}, {ram} RAM ({suite.stem})", flush=True)
+            subprocess.run(command(args.game, headless, suite, disk) + ["-ramsize", ram],
+                           cwd=ROOT, env=env, check=True, timeout=180)
+            if not result.exists() or not result.read_text().startswith("PASS "):
+                raise SystemExit(result.read_text() if result.exists() else "MAME exited without a passing test result")
+            print(result.read_text().strip())
 
 
 if __name__ == "__main__":

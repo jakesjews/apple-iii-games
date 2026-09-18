@@ -113,6 +113,29 @@ Blockfall adds Control for held soft drop. Its Shift edge detects hard drop and
 ignores a duplicate Space character on the release tick. A per-game
 `controls.lua` overrides the default mapping in `tools/mame.py`.
 
+### Native joystick
+
+The arcade games link `platform/apple3/joystick.s`. Call `joystick_init()` once,
+then `joystick_poll()` every game tick, including while paused. `joy` contains
+held `JOY_LEFT`, `JOY_RIGHT`, `JOY_UP`, `JOY_DOWN`, `JOY_BUTTON` and `JOY_SWITCH`
+bits. `joy_pressed` contains rising edges; `joy_switch_changed` reports either
+edge of the latching switch. `joy_x`/`joy_y` expose the sampled axes, with Y
+increasing upward. Values 96–160 are neutral.
+
+Port B is the default first controller on MiSTer. Its X/Y channels are 1/2,
+pushbutton is `$C062` bit 7, and switch is `$C060` bit 7. The 9708 ADC charges
+for 500 D VIA ticks, then its discharge is timed using **D VIA timer 2**, which
+this API reserves. This avoids dependence on CPU speed or video bus contention.
+The approximately 350-tick offset and eight ticks per position follow the core's
+SOS joystick range. Counter reads retry across a low-byte rollover; out-of-range
+or timed-out conversions return center. Every discharge is bounded to about
+4 ms. These routines use native hardware directly without SOS or copied ROM code.
+
+`tools/joystick.lua` accounts for MAME 0.289's reversed button labels on port B
+and turns the host's second button into a toggle. MAME already reverses its Y
+axis in the ADC model. Games must consume input edges during pause so a held up
+direction or button does not become an extra action on resume.
+
 ## Verification and references
 
 `tests/invaders.lua` first boots and plays using keyboard input alone. It then
@@ -147,6 +170,19 @@ MAME validation is distinct from physical or FPGA validation. The generated disk
 are ready for a hardware smoke test, but no hardware result is claimed here.
 
 Hardware and emulator references used during implementation:
+
+- [MiSTer joystick ADC model](https://github.com/jakesjews/Apple-III-MiSTer/blob/7f30d4dc1830a86d935ac08b318965714f9b2d6d/rtl/apple3_io.sv)
+  and [joystick timing verification](https://github.com/jakesjews/Apple-III-MiSTer/blob/7f30d4dc1830a86d935ac08b318965714f9b2d6d/sim/joystick/adc.s):
+  channel/switch wiring, Y polarity and acquisition/discharge timing. On
+  2026-09-18, `tools/test_joystick_core.py` passed 5,120 checks against a snapshot
+  of the sibling core checkout, including its then-uncommitted peripheral-wait,
+  VIA-select and horizontal-boundary timing changes based on this revision.
+  Netlists were freshly generated from that snapshot; the source checkout was
+  untouched. All 1,024 paired samples passed across every position and four
+  CPU/video settings, with a maximum axis error of 3/255. The production joystick
+  assembly is linked into an original test ROM; no Apple ROM is needed here.
+- [MAME 0.289 native ADC implementation](https://github.com/mamedev/mame/blob/mame0289/src/mame/apple/apple3_m.cpp):
+  analog input fields, Y reversal and port B's button/switch ordering.
 
 - [Apple III Boot ROM Listing, David T. Craig collection](https://www.apple3.org/Documents/SourceCode/DTCA3DOC-085_apple_3_boot_rom_listing.pdf):
   block-zero handoff, `$F479`, parameter block and sector pairing.

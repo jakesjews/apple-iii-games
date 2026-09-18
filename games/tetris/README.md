@@ -3,6 +3,12 @@
 A native Apple III falling-block game inspired by Tetris. The game, graphics,
 sound and boot disk are built from the sources in this repository.
 
+On MiSTer, use controller 1 on **Port B**: left/right moves, down soft drops,
+up hard drops, button 1 rotates clockwise, and button 2 pauses/resumes. Button 1
+also starts and retries. Each rotation and hard drop requires a fresh press;
+holding up cannot drop multiple pieces. Keyboard Z and C still provide
+counterclockwise rotation and hold. The MAME launcher uses the same controls.
+
 ```sh
 make
 make run GAME=tetris
@@ -70,3 +76,6 @@ shape and rotation, one-to-four-line clears, scoring, lock delay, hold, top-out,
 restart, sound and program integrity. The screenshot above is from input-only
 play. MAME validation does not substitute for testing on a physical Apple III or
 the FPGA core.
+An additional joystick suite tests the actual analog input ports, dead zone,
+drop and rotation edges, latching-switch pause, retry and ADC timeout in both
+disk formats.

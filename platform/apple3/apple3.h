@@ -7,6 +7,15 @@
 #define KEY_STROBE HW(0xC010)
 #define MODIFIERS HW(0xC008)
 
+/* Native port B (MiSTer's default controller 1). Y increases upward.
+ * Poll once per game tick, including while paused. Timer 2 is reserved for
+ * the ADC. The physical switch is latched: either transition is an action. */
+enum { JOY_LEFT = 1, JOY_RIGHT = 2, JOY_UP = 4, JOY_DOWN = 8,
+       JOY_BUTTON = 16, JOY_SWITCH = 32 };
+extern uint8_t joy, joy_pressed, joy_switch_changed, joy_x, joy_y;
+void joystick_init(void);
+void joystick_poll(void);
+
 /* Native 280x192 color graphics. Sprites are 14x8, XOR drawn, x <= 255.
  * Text and tile x are columns (0..39); sprites and pixels use pixel x.
  * Color is an Apple III foreground nibble with a black background. */

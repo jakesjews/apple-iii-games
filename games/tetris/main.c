@@ -410,17 +410,18 @@ static void title_screen(void)
             offset = shapes[type][0][i];
             cell(3+type*5+(offset&3),80+(offset>>2)*8,colors[type+1],tile);
         }
-    text(9,111,0xD0,"PRESS SPACE TO START");
+    text(5,111,0xD0,"PRESS SPACE OR BUTTON TO START");
     text(5,133,0xF0,"ARROWS MOVE  UP/X ROTATE  Z BACK");
     text(6,145,0xF0,"DOWN SOFT DROP   SPACE DROP");
     text(7,157,0x70,"C HOLD  P PAUSE  M SOUND");
-    text(3,172,0x70,"SEVEN SHAPES. ENDLESS POSSIBILITIES.");
-    text(5,184,0x70,"APPLE KEYS MOVE - CTRL SOFTDROP");
+    text(3,172,0x70,"STICK MOVE/DROP  BUTTON ROTATE");
+    text(4,184,0x70,"UP HARD DROP  SWITCH PAUSE");
 }
 
 static void inputs(void)
 {
     uint8_t shift;
+    joystick_poll();
     key = 0; modifiers = MODIFIERS;
     if (KEYBOARD & 128) {
         key = KEYBOARD & 127;
@@ -431,6 +432,7 @@ static void inputs(void)
     /* Mapped Space also reaches the keyboard encoder. Its character can arrive
      * on the Shift release tick; do not interpret that as a second drop. */
     hard_pressed = (shift && !shift_was_down) || (key == ' ' && !shift && !shift_was_down);
+    hard_pressed |= (joy_pressed & JOY_UP) != 0;
     shift_was_down = shift;
     if (action_timer) --action_timer;
     if (key == 'M' && !action_timer) { muted ^= 1; action_timer = 12; }
@@ -442,8 +444,8 @@ static void play_frame(void)
     uint8_t soft,interval,distance;
     erase_falling();
     movement = 0;
-    if (!(modifiers & 0x10)) --movement;
-    if (!(modifiers & 0x20)) ++movement;
+    if (!(modifiers & 0x10) || (joy & JOY_LEFT)) --movement;
+    if (!(modifiers & 0x20) || (joy & JOY_RIGHT)) ++movement;
     if (movement) {
         if (movement != move_direction) { move_piece(movement); move_timer = 12; }
         else if (move_timer) --move_timer;
@@ -454,7 +456,7 @@ static void play_frame(void)
     }
     move_direction = movement;
     if (!action_timer) {
-        if (key == 'X' || key == 24 || key == 11) { rotate_piece(1); action_timer = 6; }
+        if (key == 'X' || key == 24 || key == 11 || (joy_pressed & JOY_BUTTON)) { rotate_piece(1); action_timer = 6; }
         if (key == 'Z' || key == 26) { rotate_piece(-1); action_timer = 6; }
         if (key == 'C' || key == 3) { hold_piece(); action_timer = 6; }
     }
@@ -468,7 +470,7 @@ static void play_frame(void)
     } else {
         if (key == 'S' || key == 19 || key == 10) soft_hold = 5;
         if (soft_hold) --soft_hold;
-        soft = !(modifiers & 4) || soft_hold;
+        soft = !(modifiers & 4) || soft_hold || (joy & JOY_DOWN);
         interval = soft ? 2 : gravity[level-1];
         if (++fall_timer >= interval) {
             fall_timer = 0;
@@ -489,17 +491,18 @@ static void play_frame(void)
 void main(void)
 {
     video_init();
+    joystick_init();
     title_screen();
     for (;;) {
         wait_frame();
         ++frame_counter;
         inputs();
         if (state == TITLE) {
-            if (key == ' ' || key == 13 || hard_pressed) new_game();
+            if (key == ' ' || key == 13 || hard_pressed || (joy_pressed & JOY_BUTTON)) new_game();
             continue;
         }
         if (key == 27) { title_screen(); continue; }
-        if (key == 'P' && !action_timer && (state == PLAYING || state == PAUSED)) {
+        if (((key == 'P' && !action_timer) || joy_switch_changed) && (state == PLAYING || state == PAUSED)) {
             action_timer = 12;
             state = state == PLAYING ? PAUSED : PLAYING;
             text(2,176,0xD0,state == PAUSED ? "PAUSED" : "      ");
@@ -508,7 +511,7 @@ void main(void)
         else if (state == CLEARING) clear_frame();
         else if (state == GAME_OVER) {
             if (transition_timer) --transition_timer;
-            else if (key == ' ' || key == 13 || hard_pressed) new_game();
+            else if (key == ' ' || key == 13 || hard_pressed || (joy_pressed & JOY_BUTTON)) new_game();
         }
     }
 }

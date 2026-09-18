@@ -2,6 +2,11 @@
 
 A Breakout-style game for the native Apple III. Run `make run GAME=breakout`.
 
+MiSTer controller 1 on **Port B** moves the paddle with its D-pad or left stick.
+Button 1 starts, serves or retries; button 2 pauses/resumes. Release button 1
+after starting, then press it again to serve. The MAME launcher uses the same
+joystick controls, and the keyboard works alongside them.
+
 ![Brick Bash](../../docs/images/brick-bash.png)
 
 Hold Left/Right or A/D to move in MAME. On an Apple III, hold the Open/Solid Apple
