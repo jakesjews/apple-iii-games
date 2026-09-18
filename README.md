@@ -8,8 +8,9 @@ timing, sound and booting; individual games live under `games/`.
 | --- | --- | --- |
 | Star Siege /// | Space Invaders-style shooter | `make run GAME=invaders` |
 | Blockfall /// | Tetris-style falling blocks | `make run GAME=tetris` |
+| Brick Bash /// | Breakout-style paddle game | `make run GAME=breakout` |
 
-Both games use native 280×192 color graphics, original artwork and font, speaker
+The games use native 280×192 color graphics, original artwork and font, speaker
 effects, pause, mute and restart. They require at least 128 KB of RAM and the
 original Apple III boot ROM. No SOS disk, Apple II emulation, expansion card or
 downloaded game assets are needed.
@@ -35,6 +36,17 @@ piece into place. Best score stays in memory until reset.
 ![Blockfall running in MAME](docs/images/blockfall.png)
 
 [Blockfall controls and rules](games/tetris/README.md)
+
+## Brick Bash ///
+
+Break a wall of sixty colored bricks with a ball and paddle. Where the ball hits
+the paddle controls its rebound angle. Clear the wall to advance; later stages
+add armored bricks and faster ball movement. Three lives, pause, sound and a
+best score retained until reset.
+
+![Brick Bash running in MAME](docs/images/brick-bash.png)
+
+[Brick Bash controls and rules](games/breakout/README.md)
 
 ## Build and play
 
@@ -98,12 +110,13 @@ the keyboard's repeat; Shift provides an independently readable hard-drop edge.
 
 ## Game disks
 
-`make` builds both games, producing two 140 KB boot images per game:
+`make` builds every game, producing two 140 KB boot images per game:
 
 | Game | ProDOS sector order (MAME default) | DOS sector order (MiSTer) |
 | --- | --- | --- |
 | Star Siege | `build/invaders/invaders.po` | `build/invaders/invaders.dsk` |
 | Blockfall | `build/tetris/tetris.po` | `build/tetris/tetris.dsk` |
+| Brick Bash | `build/breakout/breakout.po` | `build/breakout/breakout.dsk` |
 
 Mount either image in the Apple III's **internal / first floppy drive**, then
 reset or power on. Preserve the extension because it identifies the sector order.
@@ -117,9 +130,10 @@ and FPGA hardware validation remains to be done.
 ## Test
 
 ```sh
-make test-all                # Both games and disk packaging
+make test-all                # Every game and disk packaging
 make test GAME=tetris        # Blockfall only, plus disk packaging
 make test GAME=invaders      # Star Siege only, plus disk packaging
+python3 tools/mame.py test breakout --windowed  # Watch a suite at normal speed
 ```
 
 The tests cold-boot the actual disk in MAME, run the assembled 6502 game and save
@@ -134,7 +148,9 @@ screenshots under `build/<game>/test/`. Failures return a nonzero exit status.
   limit, one-to-four-line clears, board compaction, scoring, speed progression,
   the seven-piece bag, top-out, pause, sound, restart and program integrity.
 - Each full suite runs the `.po` with 256 KB. Additional boot/control checks run
-  both `.dsk` images with 128 KB of RAM.
+  every `.dsk` image with 128 KB of RAM.
+- Brick Bash checks cover an input-only rally, wall and paddle rebounds, brick
+  scoring, armor, life loss, retries, stage progression, pause and mute.
 
 The first gameplay tests use only emulated key presses. Later tests arrange rare
 collision and end-of-wave situations in RAM, then let the game's actual code

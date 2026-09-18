@@ -41,21 +41,23 @@ def main() -> None:
     parser.add_argument("action", choices=("run", "test"))
     parser.add_argument("game", default="invaders", nargs="?")
     parser.add_argument("--script", type=Path)
+    parser.add_argument("--windowed", action="store_true", help="run test suites visibly at normal speed")
     args = parser.parse_args()
     if not (ROOT / "games" / args.game / "main.c").is_file():
         parser.error(f"Unknown game: {args.game}")
-    headless = args.action == "test"
+    testing = args.action == "test"
+    headless = testing and not args.windowed
     controls = ROOT / "games" / args.game / "controls.lua"
     if not controls.exists():
         controls = ROOT / "tools/controls.lua"
-    script = args.script or (ROOT / "tests" / (args.game + ".lua") if headless else controls)
+    script = args.script or (ROOT / "tests" / (args.game + ".lua") if testing else controls)
     env = os.environ.copy()
     if headless:
         env["SDL_VIDEODRIVER"] = "dummy"
         env["SDL_AUDIODRIVER"] = "dummy"
-    if not headless or args.script:
+    if not testing or args.script:
         subprocess.run(command(args.game, headless, script), cwd=ROOT, env=env,
-                       check=True, timeout=180 if headless else None)
+                       check=True, timeout=180 if testing else None)
         return
     for extension, ram, smoke in (("po", "256K", False), ("dsk", "128K", True)):
         out = ROOT / "build" / args.game / "test" / (extension + "-" + ram)
@@ -66,7 +68,7 @@ def main() -> None:
         env["A3_SMOKE_ONLY"] = "1" if smoke else "0"
         disk = ROOT / "build" / args.game / (args.game + "." + extension)
         print(f"Testing {disk.name}, {ram} RAM", flush=True)
-        subprocess.run(command(args.game, True, script, disk) + ["-ramsize", ram],
+        subprocess.run(command(args.game, headless, script, disk) + ["-ramsize", ram],
                        cwd=ROOT, env=env, check=True, timeout=180)
         if not result.exists() or not result.read_text().startswith("PASS "):
             raise SystemExit(result.read_text() if result.exists() else "MAME exited without a passing test result")

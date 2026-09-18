@@ -12,6 +12,7 @@ games/<game>/main.c          game rules, state and screen composition
 games/<game>/sprites.json    original, editable pixel art
 games/<game>/controls.lua    optional MAME keyboard mapping
 platform/apple3/             shared native hardware code and font
+platform/apple3/ui.h         small C helpers for text, numbers, titles and keys
 tools/assets.py             sprite shifts and font tables
 tools/disk.py               boot block and disk image construction
 tools/mame.py               emulator launch and test result checking
@@ -128,6 +129,11 @@ lock delay, all four line-clear counts and row compaction, bag order, level
 progression and both spawn/hidden-row top-out. Tests verify that gameplay has not
 overwritten the loaded program. `make test-all` runs both games and the shared
 disk checks; each game boots with both disk orders and with 128 KB and 256 KB RAM.
+
+New game suites use `tests/mame.lua` for symbol lookup, keyboard input, snapshots,
+VBL-safe fixtures, speaker observation and fail-closed result reporting. Brick
+Bash checks real rallies before arranging precise paddle, wall and brick
+contacts. Its ball advances in single-pixel collision substeps at every speed.
 
 MAME validation is distinct from physical or FPGA validation. The generated disks
 are ready for a hardware smoke test, but no hardware result is claimed here.

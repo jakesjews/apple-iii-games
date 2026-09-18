@@ -12,7 +12,7 @@ all: $(foreach game,$(GAMES),build/$(game)/$(game).po)
 build/%/assets.s: games/%/sprites.json platform/apple3/font.json tools/assets.py
 	$(PYTHON) tools/assets.py $< $(@D)
 
-build/%/main.o: games/%/main.c build/%/assets.s platform/apple3/apple3.h
+build/%/main.o: games/%/main.c build/%/assets.s $(wildcard platform/apple3/*.h) $(wildcard games/*/*.h)
 	$(CL65) -t none --cpu 6502 -Oirs -g -I platform/apple3 -I $(@D) -c -o $@ $<
 
 build/%/assets.o: build/%/assets.s
