@@ -14,8 +14,8 @@ The released disk and ZIP are under `releases/`. No Apple ROM is distributed.
   both checkpoints, the finish, timeout, retry, best-score retention, sharp-turn
   background restoration, and every byte of the loaded asset banks and program.
 - The complete tour driver only changes joystick input ports. Both disk formats
-  finish all three stages. The recorded run takes approximately **94 seconds**,
-  survives ten collisions and finishes with time remaining.
+  finish all three stages. The recorded run takes approximately **91 seconds**,
+  survives nine collisions and finishes with time remaining.
 - **10 RTL checks** pass using the local Apple-III-MiSTer CPU, video, RAM, VIAs,
   DAC and ADC. They cover startup, timer activity, acceleration, pause/resume,
   audio, both display pages, banked sprite execution, and **zero writes to the
@@ -25,15 +25,18 @@ The released disk and ZIP are under `releases/`. No Apple ROM is distributed.
 
 The other five game disks remain byte-for-byte unchanged.
 
+After removing the checkpoint HUD, Highway's 65 MAME checks and the ZIP smoke
+suite were rerun. The core results are from the initial release.
+
 ## Timing
 
 These are measured rendered frame rates, rather than a claim based on the
 nominal CPU frequency:
 
-| Workload | MAME 0.289 | Current core RTL |
+| Workload | MAME 0.289 | Core RTL (initial release) |
 | --- | --- | --- |
 | Attract scene | About 14.2 fps, 5-second sample | About 14.7 fps, 3-second sample |
-| Complete controller-driven race | About 8.7 fps, 94-second run | Not measured over a complete tour |
+| Complete controller-driven race | About 9.0 fps, 91-second run | Not measured over a complete tour |
 | Steering and traffic sample | Included in the complete run above | About 10.5 fps, 4-second sample |
 
 The original **30 fps target was not achieved**. Drawing cost varies with

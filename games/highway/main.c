@@ -12,7 +12,7 @@
 #define OBJECTS 9
 
 uint8_t hill, tunnel, state, stage, speed, crash_timer, key, modifiers, throttle, brake;
-uint8_t steer_left, steer_right, countdown, checkpoint, passed, previous_state;
+uint8_t steer_left, steer_right, countdown, passed, previous_state;
 uint8_t curve, tick_divider, action_timer, redraw_scene, voice_pending;
 int16_t player;
 uint16_t frame_counter, stage_distance, time_left, score, best;
@@ -23,7 +23,7 @@ static uint8_t draw_depth[3], draw_used[3];
 static uint8_t old_id[2*OBJECTS], old_visible[2*OBJECTS];
 static uint8_t new_x[OBJECTS],new_y[OBJECTS],new_w[OBJECTS],new_h[OBJECTS],new_id[OBJECTS],new_visible[OBJECTS],order[OBJECTS],slot;
 static uint8_t drawn_count, buffer_index, pose_was, hill_was, scene_dark;
-static uint8_t hud_state[2], hud_speed[2], hud_seconds[2], hud_message[2],hud_progress[2];
+static uint8_t hud_state[2], hud_speed[2], hud_seconds[2], hud_message[2];
 static uint16_t hud_score[2];
 static const uint8_t radii[16]={1,1,1,1,2,2,3,4,5,6,7,9,10,12,14,16};
 static const uint8_t widths[16]={1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6};
@@ -60,8 +60,7 @@ static void backgrounds(void)
     HW(0xFFDF)=0x56; scene_dark=1;
     for(p=0;p<2;p++) {
         page=p?64:0; scene_init();
-        label(1,0,0x70,"KM/H      TIME      SCORE       LEG");
-        number(37,0,stage+1,1,0xD0);
+        label(1,0,0x70,"KM/H      TIME      SCORE");
         label(1,184,0x70,"CTRL/DOWN BRAKE . P/B2 PAUSE . M SOUND");
         if(state==TITLE) {
             label(5,27,0xF6,"H I G H W A Y   / / /");
@@ -76,7 +75,6 @@ static void backgrounds(void)
     hud_speed[0]=hud_speed[1]=255;
     hud_seconds[0]=hud_seconds[1]=255;
     hud_score[0]=hud_score[1]=65535U;
-    hud_progress[0]=hud_progress[1]=255;
     redraw_scene=0;
 }
 static void title(void)
@@ -89,7 +87,7 @@ static void start_game(void)
     uint8_t i;
     hill=4; tunnel=0; state=READY; stage=0; scene=0; player=0; speed=0; curve=4;
     score=0; passed=0; stage_distance=0;
-    time_left=45*50; countdown=150; checkpoint=0; crash_timer=0;
+    time_left=45*50; countdown=150; crash_timer=0;
     tick_divider=0; simulation_ticks=0; engine_on=0;
     for(i=0;i<4;i++) {
         traffic_depth[i]=i*3500; traffic_lane[i]=i%3;
@@ -143,7 +141,6 @@ static void physics(void)
     }
     if(!time_left) { state=TIME_UP; engine_on=0; return; }
     --time_left;
-    if(checkpoint) --checkpoint;
     if(crash_timer) --crash_timer;
     if(throttle && !brake && !crash_timer) { if(speed<200) ++speed; }
     else if(brake) speed=speed>4?speed-4:0;
@@ -187,7 +184,7 @@ static void physics(void)
         add_score(1000); stage_distance-=25000;
         if(stage==2) { add_score(time_left/5); state=FINISHED; engine_on=0; }
         else {
-            ++stage; scene=stage; checkpoint=150;
+            ++stage; scene=stage;
             time_left+=35*50; if(time_left>99*50) time_left=99*50;
             redraw_scene=1;
         }
@@ -249,34 +246,27 @@ static void objects(void)
 }
 static void hud(void)
 {
-    uint8_t seconds,message,b,progress;
+    uint8_t seconds,message,b;
     b=buffer_index; seconds=(time_left+49)/50;
     if(state!=TITLE) {
         if(hud_speed[b]!=speed) { number(6,0,speed,3,0xF0); hud_speed[b]=speed; }
         if(hud_seconds[b]!=seconds) { number(16,0,seconds,2,time_left<500?0x90:0xD0); hud_seconds[b]=seconds; }
         if(hud_score[b]!=score) { number(26,0,score,5,0xF0); hud_score[b]=score; }
     }
-    message=state==RACING?(crash_timer?10:checkpoint?11:12+stage):state;
+    message=state==RACING?(crash_timer?10:12+stage):state;
     if(state==READY) message=20+countdown/50;
     if(muted) message+=32;
     if(hud_message[b]!=message) {
-        hud_message[b]=message; hud_progress[b]=255;
+        hud_message[b]=message;
         label(1,12,0xB0,"                                      ");
         if(state==TITLE) { label(8,12,0xD0,"BEST"); number(14,12,best,5,0xF0); }
         else if(state==READY) { label(14,12,0xD0,"GET READY"); number(25,12,countdown/50+1,1,0xF0); }
         else if(state==PAUSED) label(9,12,0xD0,"PAUSED - P / BUTTON 2");
         else if(state==TIME_UP) label(7,12,0x90,"TIME UP - RETURN TO RETRY");
         else if(state==FINISHED) label(4,12,0xC0,"TOUR COMPLETE! RETURN TO RETRY");
-        else if(checkpoint) label(7,12,0xC0,"CHECKPOINT!  +35 SECONDS");
         else if(crash_timer) label(12,12,0x90,"CONTACT!  -2 SEC");
         else label(1,12,0xB0,tunnel?(const char *)"LIGHTHOUSE TUNNEL":names[stage]);
         if(muted) label(35,12,0x70,"MUTE");
-    }
-    if(state==RACING&&!checkpoint&&!crash_timer) {
-        progress=stage_distance/250;
-        if(hud_progress[b]!=progress) {
-            number(29,12,progress,2,0xF0); label(31,12,0x70,"%"); hud_progress[b]=progress;
-        }
     }
     if(hud_state[b]!=state) {
         hud_state[b]=state;

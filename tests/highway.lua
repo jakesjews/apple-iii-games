@@ -4,7 +4,7 @@ local function signed(name) local v=t.word(name); return v>=32768 and v-65536 or
 local function fixture()
     t.settle()
     t.write('state',2); t.write('stage',0); t.write('scene',0); t.write('tunnel',0)
-    t.write('speed',120); t.write('crash_timer',0); t.write('checkpoint',0)
+    t.write('speed',120); t.write('crash_timer',0)
     t.writeword('player',0); t.writeword('stage_distance',0); t.writeword('time_left',1750)
     t.write('redraw_scene',1); t.write('action_timer',0)
     for i=0,2 do t.mem:write_u16(t.addr('traffic_depth')+2*i,0); t.array('car_hit',i,0); t.array('traffic_lane',i,0) end

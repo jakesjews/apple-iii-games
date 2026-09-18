@@ -20,6 +20,9 @@ press **Ctrl+F12**. The standalone disk includes the game and its assets; it nee
 no SOS disk. Loading the large asset set takes longer than the other games.
 A 128 KB machine shows an explicit RAM requirement instead of starting.
 
+For joystick play, use **controller 1** and set the core's **Joystick 1 on**
+option to **Port B** (the default).
+
 | Action | MiSTer controller 1, Port B | Native Apple III keyboard | MAME keyboard |
 | --- | --- | --- | --- |
 | Start / retry | Button 1 | Space or Return | Space or Return |
